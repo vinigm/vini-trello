@@ -1138,6 +1138,7 @@ select:focus-visible {
   font-weight: 400;
   line-height: 1.32;
   letter-spacing: -0.01em;
+  text-transform: lowercase;
 }
 
 .task-card > h3:first-child { margin-top: 0; }
@@ -1394,6 +1395,7 @@ select:focus-visible {
   cursor: grab;
   font-size: 9px;
   font-weight: 750;
+  text-transform: lowercase;
   user-select: none;
 }
 
@@ -1607,6 +1609,7 @@ select:focus-visible {
   font-size: 9px;
   line-height: 1;
   text-align: left;
+  text-transform: lowercase;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1642,6 +1645,7 @@ select:focus-visible {
   background: transparent;
   font-size: 9px;
   line-height: 14px;
+  text-transform: lowercase;
   text-overflow: ellipsis;
 }
 
@@ -1888,6 +1892,7 @@ select:focus-visible {
   font-size: 17px;
   font-weight: 700;
   line-height: 1.35;
+  text-transform: lowercase;
 }
 
 .description-section { margin-bottom: 26px; }
