@@ -806,6 +806,42 @@ type CopiedTextFormat = {
   alignment: "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
 };
 
+type RichListCommand = "insertUnorderedList" | "insertOrderedList";
+
+function getEditingBlock(editor: HTMLDivElement, range: Range) {
+  const container = range.startContainer;
+  const parentElement = container instanceof Element ? container : container.parentElement;
+  const block = parentElement?.closest("li, p, div, h2, blockquote");
+
+  if (block && block !== editor && editor.contains(block)) return block;
+  if (container.nodeType === Node.TEXT_NODE && container.parentNode === editor) return container;
+  return editor;
+}
+
+function getTextBeforeCaret(editor: HTMLDivElement, range: Range) {
+  const block = getEditingBlock(editor, range);
+  const beforeCaret = range.cloneRange();
+  beforeCaret.setStart(block, 0);
+  return beforeCaret.toString().replace(/\u00a0/g, " ");
+}
+
+function removeTextBeforeCaret(editor: HTMLDivElement, range: Range) {
+  const block = getEditingBlock(editor, range);
+  const markerRange = range.cloneRange();
+  markerRange.setStart(block, 0);
+  markerRange.deleteContents();
+
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function listCommandForMarker(marker: string): RichListCommand | null {
+  if (marker === "-" || marker === "*") return "insertUnorderedList";
+  if (/^\d+[.)]$/.test(marker)) return "insertOrderedList";
+  return null;
+}
+
 function RichTextEditor({
   value,
   onChange,
@@ -843,6 +879,37 @@ function RichTextEditor({
 
   function syncValue() {
     if (editorRef.current) onChange(editorRef.current.innerHTML);
+  }
+
+  function handleEditorKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection?.rangeCount || !selection.isCollapsed || !editor.contains(selection.anchorNode)) return;
+
+    const range = selection.getRangeAt(0);
+    const parentElement = range.startContainer instanceof Element
+      ? range.startContainer
+      : range.startContainer.parentElement;
+    const listItem = parentElement?.closest("li");
+
+    if (event.key === "Tab" && listItem && editor.contains(listItem)) {
+      event.preventDefault();
+      document.execCommand(event.shiftKey || event.metaKey ? "outdent" : "indent", false);
+      rememberSelection();
+      syncValue();
+      return;
+    }
+
+    if (event.key !== " " || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || listItem) return;
+
+    const command = listCommandForMarker(getTextBeforeCaret(editor, range));
+    if (!command) return;
+
+    event.preventDefault();
+    removeTextBeforeCaret(editor, range);
+    document.execCommand(command, false);
+    rememberSelection();
+    syncValue();
   }
 
   function runCommand(command: string, commandValue?: string) {
@@ -973,6 +1040,7 @@ function RichTextEditor({
         aria-multiline="true"
         data-placeholder={placeholder}
         onInput={syncValue}
+        onKeyDown={handleEditorKeyDown}
         onKeyUp={rememberSelection}
         onMouseUp={applyCopiedFormat}
         onFocus={rememberSelection}
