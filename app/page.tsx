@@ -821,6 +821,14 @@ function CardModal({
   });
   const [activityText, setActivityText] = useState("");
 
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!draft.title.trim()) return;
