@@ -2007,6 +2007,62 @@ select:focus-visible {
   box-shadow: 0 7px 22px rgba(62, 57, 48, 0.05);
 }
 
+.diary-composer-modes {
+  width: fit-content;
+  margin: 0 0 8px;
+  padding: 2px;
+  border: 1px solid rgba(53, 71, 100, 0.14);
+  border-radius: 7px;
+  display: flex;
+  gap: 2px;
+  background: #eef0f2;
+}
+
+.diary-composer-modes button {
+  min-width: 70px;
+  min-height: 29px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  color: #71767d;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.diary-composer-modes button:hover { color: #354764; background: rgba(255, 255, 255, 0.58); }
+.diary-composer-modes button.active { color: #fff; background: #354764; box-shadow: 0 1px 3px rgba(44, 59, 82, 0.16); }
+
+.diary-work-template {
+  border: 1px solid rgba(46, 43, 48, 0.15);
+  border-radius: 9px;
+  display: grid;
+  overflow: hidden;
+  background: #fff;
+}
+
+.diary-work-template label { padding: 10px 12px; display: grid; gap: 5px; }
+.diary-work-template label + label { border-top: 1px solid rgba(46, 43, 48, 0.1); }
+.diary-work-template label > span { color: #344f73; font-size: 11px; font-weight: 750; }
+.diary-work-template textarea {
+  width: 100%;
+  min-height: 54px;
+  max-height: 120px;
+  padding: 7px 9px;
+  border: 1px solid #dce0e4;
+  border-radius: 6px;
+  outline: 0;
+  resize: vertical;
+  color: #303238;
+  background: #fbfbfb;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.diary-work-template textarea:focus { border-color: #7890ad; box-shadow: 0 0 0 2px rgba(83, 112, 148, 0.1); background: #fff; }
+
 .diary-composer .rich-description-editor,
 .diary-post-editor .rich-description-editor {
   min-height: 112px;

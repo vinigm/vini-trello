@@ -1062,6 +1062,39 @@ function hasRichText(value: string) {
   return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim().length > 0;
 }
 
+type DiaryComposerMode = "free" | "work";
+
+type WorkDiaryDraft = {
+  projectStage: string;
+  insights: string;
+  nextSteps: string;
+};
+
+const EMPTY_WORK_DIARY_DRAFT: WorkDiaryDraft = {
+  projectStage: "",
+  insights: "",
+  nextSteps: "",
+};
+
+function hasWorkDiaryContent(draft: WorkDiaryDraft) {
+  return Object.values(draft).some((value) => value.trim().length > 0);
+}
+
+function escapeDiaryText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/\r?\n/g, "<br>");
+}
+
+function buildWorkDiaryContent(draft: WorkDiaryDraft) {
+  const field = (title: string, value: string) => `<h2>${title}:</h2><p>${escapeDiaryText(value.trim()) || "<br>"}</p>`;
+  return `<div class="diary-work-entry">${field("Etapa do projeto trabalhada", draft.projectStage)}${field("Insights gerados", draft.insights)}${field("Próximos passos", draft.nextSteps)}</div>`;
+}
+
 function DiaryWorkspace({
   posts,
   onAdd,
@@ -1073,14 +1106,22 @@ function DiaryWorkspace({
   onUpdate: (id: string, content: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const [composerMode, setComposerMode] = useState<DiaryComposerMode>("free");
   const [draft, setDraft] = useState("");
+  const [workDraft, setWorkDraft] = useState<WorkDiaryDraft>({ ...EMPTY_WORK_DIARY_DRAFT });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const canPublish = composerMode === "free" ? hasRichText(draft) : hasWorkDiaryContent(workDraft);
 
   function publishPost() {
-    if (!hasRichText(draft)) return;
-    onAdd(draft);
-    setDraft("");
+    if (!canPublish) return;
+    if (composerMode === "free") {
+      onAdd(draft);
+      setDraft("");
+    } else {
+      onAdd(buildWorkDiaryContent(workDraft));
+      setWorkDraft({ ...EMPTY_WORK_DIARY_DRAFT });
+    }
   }
 
   function startEditing(post: DiaryPost) {
@@ -1106,15 +1147,39 @@ function DiaryWorkspace({
       </header>
 
       <section className="diary-composer" aria-label="Nova postagem do diário">
-        <RichTextEditor
-          value={draft}
-          onChange={setDraft}
-          ariaLabel="Conteúdo da nova postagem"
-          placeholder="O que você fez ou está fazendo agora?"
-        />
+        <div className="diary-composer-modes" role="tablist" aria-label="Formato da postagem">
+          <button type="button" role="tab" aria-selected={composerMode === "free"} className={composerMode === "free" ? "active" : ""} onClick={() => setComposerMode("free")}>Livre</button>
+          <button type="button" role="tab" aria-selected={composerMode === "work"} className={composerMode === "work" ? "active" : ""} onClick={() => setComposerMode("work")}>Trabalho</button>
+        </div>
+
+        {composerMode === "free" ? (
+          <div role="tabpanel" aria-label="Postagem livre">
+            <RichTextEditor
+              value={draft}
+              onChange={setDraft}
+              ariaLabel="Conteúdo da nova postagem"
+              placeholder="O que você fez ou está fazendo agora?"
+            />
+          </div>
+        ) : (
+          <div className="diary-work-template" role="tabpanel" aria-label="Postagem de trabalho">
+            <label>
+              <span>Etapa do projeto trabalhada:</span>
+              <textarea value={workDraft.projectStage} onChange={(event) => setWorkDraft((current) => ({ ...current, projectStage: event.target.value }))} placeholder="Em qual etapa você trabalhou?" />
+            </label>
+            <label>
+              <span>Insights gerados:</span>
+              <textarea value={workDraft.insights} onChange={(event) => setWorkDraft((current) => ({ ...current, insights: event.target.value }))} placeholder="O que você descobriu ou aprendeu?" />
+            </label>
+            <label>
+              <span>Próximos passos:</span>
+              <textarea value={workDraft.nextSteps} onChange={(event) => setWorkDraft((current) => ({ ...current, nextSteps: event.target.value }))} placeholder="O que precisa acontecer depois?" />
+            </label>
+          </div>
+        )}
         <div className="diary-composer-actions">
           <small>Salvo automaticamente depois de publicar</small>
-          <button type="button" className="primary-button" disabled={!hasRichText(draft)} onClick={publishPost}>Publicar</button>
+          <button type="button" className="primary-button" disabled={!canPublish} onClick={publishPost}>Publicar</button>
         </div>
       </section>
 
