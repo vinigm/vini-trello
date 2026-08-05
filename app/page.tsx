@@ -71,6 +71,7 @@ import {
   FormEvent,
   type CSSProperties,
   type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -126,13 +127,27 @@ type WorkspaceState = {
   plannerNotes: Record<string, string>;
   plannerSlotColors: Record<string, string>;
   plannerWorkSlots: string[];
+  plannerActivities: Record<string, PlannerActivity[]>;
 };
+
+type PlannerActivity = {
+  id: string;
+  title: string;
+  color: string;
+};
+
+type PlannerDragPayload =
+  | { mode: "new"; title: string; color: string }
+  | { mode: "move"; activityId: string; sourceKey: string };
 
 type SaveStatus = "loading" | "saving" | "saved" | "offline";
 
 const LABEL_COLORS = ["#f26b5f", "#f4a340", "#8d79e8", "#38a88f", "#4d8fd9"];
 const COLUMN_COLORS = ["#f8dddd", "#dce8f4", "#dcecdf", "#f3ead1", "#ece2f3", "#e5e7eb", "#d9e8e7", "#ebe6df"];
 const WORK_SLOT_COLOR = "#f6aaa7";
+const ACADEMY_SLOT_COLOR = "#cfe4f6";
+const CUSTOM_SLOT_COLOR = "#f3ead1";
+const PLANNER_DRAG_MIME = "application/x-vinello-planner-card";
 
 const DEFAULT_BOARD: BoardState = {
   id: "pessoal",
@@ -425,6 +440,7 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
       plannerNotes,
       plannerSlotColors,
       plannerWorkSlots: [...plannerWorkSlots],
+      plannerActivities: workspace.plannerActivities ?? {},
     };
   }
 
@@ -443,6 +459,7 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     plannerNotes: workspace.plannerNotes ?? {},
     plannerSlotColors: workspace.plannerSlotColors ?? {},
     plannerWorkSlots: workspace.plannerWorkSlots ?? [],
+    plannerActivities: workspace.plannerActivities ?? {},
   };
 }
 
@@ -459,6 +476,7 @@ const DEFAULT_WORKSPACE = migrateWorkspace({
   plannerNotes: {},
   plannerSlotColors: {},
   plannerWorkSlots: [],
+  plannerActivities: {},
 });
 
 function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
@@ -483,6 +501,7 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       plannerNotes: {},
       plannerSlotColors: {},
       plannerWorkSlots: [],
+      plannerActivities: {},
     });
   }
 
@@ -1179,11 +1198,17 @@ function weekSlotKey(date: Date, time: string) {
   return `week:${dateKey(date)}:${time}`;
 }
 
+function parseWeekSlotKey(key: string) {
+  const match = key.match(/^week:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})$/);
+  return match ? { day: match[1], time: match[2] } : null;
+}
+
 function WeeklySlot({
   slotKey,
   value,
   color,
   hasWork,
+  activities,
   selected,
   isFullHour,
   inputRef,
@@ -1194,12 +1219,14 @@ function WeeklySlot({
   onCopy,
   onKeyDown,
   onOpenContextMenu,
+  onDropPlannerCard,
   ariaLabel,
 }: {
   slotKey: string;
   value: string;
   color: string;
   hasWork: boolean;
+  activities: PlannerActivity[];
   selected: boolean;
   isFullHour: boolean;
   inputRef: (node: HTMLInputElement | null) => void;
@@ -1209,10 +1236,12 @@ function WeeklySlot({
   onPaste: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onCopy: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
-  onOpenContextMenu: (event: ReactMouseEvent, kind: "primary" | "work") => void;
+  onOpenContextMenu: (event: ReactMouseEvent, kind: "primary" | "work" | "activity", activityId?: string) => void;
+  onDropPlannerCard: (payload: PlannerDragPayload) => void;
   ariaLabel: string;
 }) {
   const primaryInputRef = useRef<HTMLInputElement | null>(null);
+  const [isTemplateOver, setIsTemplateOver] = useState(false);
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `week-slot-${slotKey}`,
     data: { type: "week-slot", slotKey },
@@ -1227,9 +1256,40 @@ function WeeklySlot({
     transform: DndCSS.Translate.toString(transform),
   } as CSSProperties;
 
+  function readPlannerDrag(event: ReactDragEvent) {
+    const raw = event.dataTransfer.getData(PLANNER_DRAG_MIME);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as PlannerDragPayload;
+    } catch {
+      return null;
+    }
+  }
+
   return (
-    <div ref={setDroppableRef} className={`week-slot ${isFullHour ? "is-full-hour" : ""} ${isOver ? "is-over" : ""}`} role="gridcell">
-      <div className={`week-slot-items ${value ? "has-primary" : ""} ${hasWork ? "has-work" : ""}`}>
+    <div
+      ref={setDroppableRef}
+      className={`week-slot ${isFullHour ? "is-full-hour" : ""} ${isOver ? "is-over" : ""} ${isTemplateOver ? "is-template-over" : ""}`}
+      role="gridcell"
+      tabIndex={-1}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(PLANNER_DRAG_MIME)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = event.dataTransfer.effectAllowed === "move" ? "move" : "copy";
+        setIsTemplateOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsTemplateOver(false);
+      }}
+      onDrop={(event) => {
+        const payload = readPlannerDrag(event);
+        if (!payload) return;
+        event.preventDefault();
+        setIsTemplateOver(false);
+        onDropPlannerCard(payload);
+      }}
+    >
+      <div className={`week-slot-items ${value ? "has-primary" : ""} ${hasWork || activities.length > 0 ? "has-overlay" : ""}`}>
         <div
           ref={setDraggableRef}
           className={`week-slot-card ${value ? "has-value" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""}`}
@@ -1273,6 +1333,25 @@ function WeeklySlot({
             Trabalho
           </button>
         )}
+        {activities.map((activity) => (
+          <button
+            key={activity.id}
+            type="button"
+            className="week-activity-card"
+            style={{ "--activity-color": activity.color } as CSSProperties}
+            title={`${activity.title} — arraste para mover ou clique com o botão direito para opções`}
+            draggable
+            onClick={() => primaryInputRef.current?.focus()}
+            onDragStart={(event) => {
+              const payload: PlannerDragPayload = { mode: "move", activityId: activity.id, sourceKey: slotKey };
+              event.dataTransfer.setData(PLANNER_DRAG_MIME, JSON.stringify(payload));
+              event.dataTransfer.effectAllowed = "move";
+            }}
+            onContextMenu={(event) => onOpenContextMenu(event, "activity", activity.id)}
+          >
+            {activity.title}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1283,25 +1362,33 @@ function WeeklyPlannerGrid({
   notes,
   colors,
   workSlots,
+  activities,
   onChangeNote,
   onChangeColors,
   onMoveSlot,
   onMoveSlots,
   onRemoveWorkSlot,
+  onAddActivity,
+  onMoveActivity,
+  onRemoveActivity,
 }: {
   days: Date[];
   notes: Record<string, string>;
   colors: Record<string, string>;
   workSlots: string[];
+  activities: Record<string, PlannerActivity[]>;
   onChangeNote: (key: string, value: string) => void;
   onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
   onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
   onRemoveWorkSlot: (key: string) => void;
+  onAddActivity: (keys: string[], title: string, color: string) => void;
+  onMoveActivity: (activityId: string, sourceKey: string, targetKey: string) => void;
+  onRemoveActivity: (activityId: string) => void;
 }) {
   const cellRefs = useRef(new Map<string, HTMLInputElement>());
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
-  const [contextMenu, setContextMenu] = useState<{ slotKey: string; kind: "primary" | "work"; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ slotKey: string; kind: "primary" | "work" | "activity"; activityId?: string; x: number; y: number } | null>(null);
   const workSlotSet = useMemo(() => new Set(workSlots), [workSlots]);
   const today = dateKey(new Date());
   const scheduleSensors = useSensors(
@@ -1396,12 +1483,13 @@ function WeeklyPlannerGrid({
     setSelectedKeys(new Set(validMoves.map((move) => move.targetKey)));
   }
 
-  function openContextMenu(event: ReactMouseEvent, slotKey: string, kind: "primary" | "work") {
+  function openContextMenu(event: ReactMouseEvent, slotKey: string, kind: "primary" | "work" | "activity", activityId?: string) {
     event.preventDefault();
     event.stopPropagation();
     setContextMenu({
       slotKey,
       kind,
+      activityId,
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 174)),
       y: Math.max(8, Math.min(event.clientY, window.innerHeight - 54)),
     });
@@ -1411,6 +1499,8 @@ function WeeklyPlannerGrid({
     if (!contextMenu) return;
     if (contextMenu.kind === "work") {
       onRemoveWorkSlot(contextMenu.slotKey);
+    } else if (contextMenu.kind === "activity" && contextMenu.activityId) {
+      onRemoveActivity(contextMenu.activityId);
     } else {
       onChangeNote(contextMenu.slotKey, "");
       onChangeColors([contextMenu.slotKey], "#ffffff");
@@ -1431,7 +1521,7 @@ function WeeklyPlannerGrid({
           <div className="week-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
             <button type="button" role="menuitem" onClick={deleteContextCard}>
               <Trash2 size={14} />
-              {contextMenu.kind === "work" ? "Remover Trabalho" : "Apagar card"}
+              {contextMenu.kind === "work" ? "Remover Trabalho" : contextMenu.kind === "activity" ? "Apagar atividade" : "Apagar card"}
             </button>
           </div>
         </>
@@ -1470,6 +1560,7 @@ function WeeklyPlannerGrid({
                       value={value}
                       color={colors[key] ?? "#ffffff"}
                       hasWork={workSlotSet.has(key)}
+                      activities={activities[key] ?? []}
                       selected={selectedKeys.has(key)}
                       isFullHour={isFullHour}
                       inputRef={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
@@ -1482,7 +1573,11 @@ function WeeklyPlannerGrid({
                       onPaste={(event) => handlePaste(event, row, column)}
                       onCopy={(event) => handleCopy(event, value)}
                       onKeyDown={(event) => handleCellKeyDown(event, row, column)}
-                      onOpenContextMenu={(event, kind) => openContextMenu(event, key, kind)}
+                      onOpenContextMenu={(event, kind, activityId) => openContextMenu(event, key, kind, activityId)}
+                      onDropPlannerCard={(payload) => {
+                        if (payload.mode === "new") onAddActivity([key], payload.title, payload.color);
+                        else onMoveActivity(payload.activityId, payload.sourceKey, key);
+                      }}
                       ariaLabel={`${WEEKDAYS[column]}, ${dateKey(date)}, às ${time}`}
                     />
                   );
@@ -1504,6 +1599,7 @@ function PlanningWorkspace({
   notes,
   colors,
   workSlots,
+  activities,
   onChangeMode,
   onChangeCursor,
   onChangeNote,
@@ -1512,12 +1608,16 @@ function PlanningWorkspace({
   onMoveSlots,
   onFillWorkWeek,
   onRemoveWorkSlot,
+  onAddActivity,
+  onMoveActivity,
+  onRemoveActivity,
 }: {
   mode: PlanningMode;
   cursor: Date;
   notes: Record<string, string>;
   colors: Record<string, string>;
   workSlots: string[];
+  activities: Record<string, PlannerActivity[]>;
   onChangeMode: (mode: PlanningMode) => void;
   onChangeCursor: (date: Date) => void;
   onChangeNote: (key: string, value: string) => void;
@@ -1526,15 +1626,44 @@ function PlanningWorkspace({
   onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
   onFillWorkWeek: (days: Date[]) => void;
   onRemoveWorkSlot: (key: string) => void;
+  onAddActivity: (keys: string[], title: string, color: string) => void;
+  onMoveActivity: (activityId: string, sourceKey: string, targetKey: string) => void;
+  onRemoveActivity: (activityId: string) => void;
 }) {
   const weekStart = startOfWeek(cursor);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const weekStartKey = dateKey(weekStart);
+  const [customTitle, setCustomTitle] = useState("");
+  const [customDay, setCustomDay] = useState(weekStartKey);
+  const [customStart, setCustomStart] = useState("18:00");
+  const [customEnd, setCustomEnd] = useState("19:00");
+  const todayKey = dateKey(new Date());
+  const fallbackCustomDay = weekDays.some((day) => dateKey(day) === todayKey) ? todayKey : weekStartKey;
+  const selectedCustomDay = weekDays.some((day) => dateKey(day) === customDay) ? customDay : fallbackCustomDay;
   const monthTitle = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(cursor);
   const shiftCursor = (direction: -1 | 1) => {
     if (mode === "week") onChangeCursor(addDays(cursor, direction * 7));
     if (mode === "month") onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1));
     if (mode === "year") onChangeCursor(new Date(cursor.getFullYear() + direction, cursor.getMonth(), 1));
   };
+
+  function addCustomActivity(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = customTitle.trim();
+    if (!title || customEnd <= customStart) return;
+    const keys = WEEK_TIME_SLOTS
+      .filter((time) => time >= customStart && time < customEnd)
+      .map((time) => `week:${selectedCustomDay}:${time}`);
+    if (!keys.length) return;
+    onAddActivity(keys, title, CUSTOM_SLOT_COLOR);
+    setCustomTitle("");
+  }
+
+  function startAcademyDrag(event: ReactDragEvent<HTMLButtonElement>) {
+    const payload: PlannerDragPayload = { mode: "new", title: "Academia", color: ACADEMY_SLOT_COLOR };
+    event.dataTransfer.setData(PLANNER_DRAG_MIME, JSON.stringify(payload));
+    event.dataTransfer.effectAllowed = "copy";
+  }
 
   return (
     <section className={`planning-workspace planning-${mode}`}>
@@ -1547,19 +1676,52 @@ function PlanningWorkspace({
       </nav>
 
       <header className="planner-header">
-        <div>
+        <div className="planner-heading-tools">
           <span>Planejamento</span>
           <h1>{mode === "year" ? cursor.getFullYear() : monthTitle}</h1>
           {mode === "week" && (
-            <button
-              type="button"
-              className="fill-work-button"
-              title="Preencher os horários de trabalho desta semana"
-              onClick={() => onFillWorkWeek(weekDays)}
-            >
-              <Briefcase size={13} />
-              Trabalho
-            </button>
+            <div className="planner-quick-tools">
+              <button
+                type="button"
+                className="fill-work-button"
+                title="Preencher os horários de trabalho desta semana"
+                onClick={() => onFillWorkWeek(weekDays)}
+              >
+                <Briefcase size={13} />
+                Trabalho
+              </button>
+              <button
+                type="button"
+                className="academy-template-card"
+                title="Arraste Academia para um horário ou clique para preencher o formulário"
+                draggable
+                onClick={() => setCustomTitle("Academia")}
+                onDragStart={startAcademyDrag}
+              >
+                <GripVertical size={12} />
+                Academia
+              </button>
+              <form className="custom-activity-form" onSubmit={addCustomActivity}>
+                <strong>Personalizado:</strong>
+                <input value={customTitle} onChange={(event) => setCustomTitle(event.target.value)} placeholder="Nome da atividade" aria-label="Nome da atividade personalizada" required />
+                <select value={selectedCustomDay} onChange={(event) => setCustomDay(event.target.value)} aria-label="Dia da atividade">
+                  {weekDays.map((day, index) => <option key={dateKey(day)} value={dateKey(day)}>{WEEKDAYS[index]} {String(day.getDate()).padStart(2, "0")}/{String(day.getMonth() + 1).padStart(2, "0")}</option>)}
+                </select>
+                <select value={customStart} onChange={(event) => {
+                  const start = event.target.value;
+                  setCustomStart(start);
+                  if (customEnd <= start) {
+                    setCustomEnd([...WEEK_TIME_SLOTS.slice(1), "23:30"].find((time) => time > start) ?? "23:30");
+                  }
+                }} aria-label="Hora de início">
+                  {WEEK_TIME_SLOTS.map((time) => <option key={time} value={time}>{time}</option>)}
+                </select>
+                <select value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} aria-label="Hora de término">
+                  {[...WEEK_TIME_SLOTS.slice(1), "23:30"].filter((time) => time > customStart).map((time) => <option key={time} value={time}>{time}</option>)}
+                </select>
+                <button type="submit" aria-label="Adicionar atividade personalizada" title="Adicionar ao cronograma"><Plus size={13} /></button>
+              </form>
+            </div>
           )}
         </div>
         <div className="planner-navigation">
@@ -1570,7 +1732,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} />
+        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} activities={activities} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} onAddActivity={onAddActivity} onMoveActivity={onMoveActivity} onRemoveActivity={onRemoveActivity} />
       )}
 
       {mode === "month" && (
@@ -1714,6 +1876,72 @@ export default function Home() {
       ...current,
       plannerWorkSlots: (current.plannerWorkSlots ?? []).filter((slotKey) => slotKey !== key),
     }));
+  }
+
+  function addPlannerActivity(keys: string[], title: string, color: string) {
+    const activity: PlannerActivity = { id: makeId("planner-activity"), title, color };
+    setWorkspaceState((current) => {
+      const plannerActivities = { ...(current.plannerActivities ?? {}) };
+      keys.forEach((key) => {
+        const existing = plannerActivities[key] ?? [];
+        if (existing.some((item) => normalizeKey(item.title) === normalizeKey(title))) return;
+        plannerActivities[key] = [...existing, activity];
+      });
+      return { ...current, plannerActivities };
+    });
+  }
+
+  function movePlannerActivity(activityId: string, sourceKey: string, targetKey: string) {
+    if (sourceKey === targetKey) return;
+    setWorkspaceState((current) => {
+      const source = parseWeekSlotKey(sourceKey);
+      const target = parseWeekSlotKey(targetKey);
+      if (!source || !target) return current;
+      const sourceTimeIndex = WEEK_TIME_SLOTS.indexOf(source.time);
+      const targetTimeIndex = WEEK_TIME_SLOTS.indexOf(target.time);
+      if (sourceTimeIndex < 0 || targetTimeIndex < 0) return current;
+      const dayOffset = Math.round((new Date(`${target.day}T12:00:00`).getTime() - new Date(`${source.day}T12:00:00`).getTime()) / 86_400_000);
+      const timeOffset = targetTimeIndex - sourceTimeIndex;
+      const occupiedSlots = Object.entries(current.plannerActivities ?? {})
+        .filter(([, items]) => items.some((item) => item.id === activityId));
+      if (!occupiedSlots.length) return current;
+
+      const moves = occupiedSlots.map(([key, items]) => {
+        const parsed = parseWeekSlotKey(key);
+        const activity = items.find((item) => item.id === activityId);
+        if (!parsed || !activity) return null;
+        const timeIndex = WEEK_TIME_SLOTS.indexOf(parsed.time) + timeOffset;
+        if (timeIndex < 0 || timeIndex >= WEEK_TIME_SLOTS.length) return null;
+        const nextDay = addDays(new Date(`${parsed.day}T12:00:00`), dayOffset);
+        return { sourceKey: key, targetKey: weekSlotKey(nextDay, WEEK_TIME_SLOTS[timeIndex]), activity };
+      });
+      if (moves.some((move) => !move)) return current;
+
+      const plannerActivities = { ...(current.plannerActivities ?? {}) };
+      occupiedSlots.forEach(([key]) => {
+        const remaining = (plannerActivities[key] ?? []).filter((item) => item.id !== activityId);
+        if (remaining.length) plannerActivities[key] = remaining;
+        else delete plannerActivities[key];
+      });
+      moves.forEach((move) => {
+        if (!move) return;
+        const existing = plannerActivities[move.targetKey] ?? [];
+        plannerActivities[move.targetKey] = [...existing.filter((item) => item.id !== activityId), move.activity];
+      });
+      return { ...current, plannerActivities };
+    });
+  }
+
+  function removePlannerActivity(activityId: string) {
+    setWorkspaceState((current) => {
+      const plannerActivities = { ...(current.plannerActivities ?? {}) };
+      Object.keys(plannerActivities).forEach((key) => {
+        const remaining = plannerActivities[key].filter((item) => item.id !== activityId);
+        if (remaining.length) plannerActivities[key] = remaining;
+        else delete plannerActivities[key];
+      });
+      return { ...current, plannerActivities };
+    });
   }
 
   const sensors = useSensors(
@@ -2083,7 +2311,7 @@ export default function Home() {
         </header>
 
         {activeView === "planning" ? (
-          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} />
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} activities={workspaceState.plannerActivities} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} onAddActivity={addPlannerActivity} onMoveActivity={movePlannerActivity} onRemoveActivity={removePlannerActivity} />
         ) : <>
           {(query || priorityFilter !== "all") && (
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} nos desktops visíveis</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>

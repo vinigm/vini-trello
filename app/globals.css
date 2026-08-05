@@ -1356,6 +1356,13 @@ select:focus-visible {
 .planning-week .planner-header h1 { font-size: 20px; }
 .planning-week .planner-navigation button { height: 28px; }
 
+.planner-quick-tools {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .fill-work-button {
   min-height: 27px;
   padding: 0 9px;
@@ -1373,6 +1380,76 @@ select:focus-visible {
 
 .fill-work-button:hover { background: #f39d99; }
 .fill-work-button:focus-visible { outline: 2px solid rgba(115, 56, 52, 0.32); outline-offset: 2px; }
+
+.academy-template-card {
+  min-height: 27px;
+  padding: 0 9px 0 5px;
+  border: 1px solid #9fc4df;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #31536d;
+  background: #cfe4f6;
+  cursor: grab;
+  font-size: 9px;
+  font-weight: 750;
+  user-select: none;
+}
+
+.academy-template-card:active { cursor: grabbing; }
+.academy-template-card:hover { background: #c4def3; }
+
+.custom-activity-form {
+  min-height: 29px;
+  padding: 2px 3px 2px 7px;
+  border: 1px solid rgba(50, 51, 54, 0.16);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.custom-activity-form strong {
+  margin-right: 2px;
+  color: #68665f;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.custom-activity-form input,
+.custom-activity-form select {
+  height: 23px;
+  padding: 0 6px;
+  border: 1px solid rgba(50, 51, 54, 0.15);
+  border-radius: 4px;
+  outline: 0;
+  color: #383a3f;
+  background: #fff;
+  font-size: 9px;
+}
+
+.custom-activity-form input { width: 130px; }
+.custom-activity-form select { min-width: 61px; }
+.custom-activity-form select:nth-of-type(1) { min-width: 83px; }
+.custom-activity-form input:focus,
+.custom-activity-form select:focus { border-color: #6f89a6; box-shadow: 0 0 0 2px rgba(85, 119, 159, 0.12); }
+
+.custom-activity-form > button {
+  width: 24px;
+  height: 23px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #354764;
+  cursor: pointer;
+}
+
+.custom-activity-form > button:hover { background: #263852; }
 
 .week-planner {
   padding: 0 12px 7px;
@@ -1475,6 +1552,7 @@ select:focus-visible {
 }
 
 .week-slot.is-over { background: rgba(85, 119, 159, 0.18); }
+.week-slot.is-template-over { background: rgba(92, 137, 175, 0.24); box-shadow: inset 0 0 0 1px rgba(70, 110, 145, 0.42); }
 
 .week-time-label.is-full-hour,
 .week-slot.is-full-hour { border-top: 1px solid rgba(50, 51, 54, 0.2); }
@@ -1496,11 +1574,13 @@ select:focus-visible {
   position: relative;
   border: 1px solid transparent;
   border-radius: 3px;
+  display: flex;
+  align-items: center;
   flex: 1 1 0;
   background: transparent;
 }
 
-.week-slot-items.has-work:not(.has-primary):not(:focus-within) .week-slot-card {
+.week-slot-items.has-overlay:not(.has-primary):not(:focus-within) .week-slot-card {
   width: 0;
   border: 0;
   flex: 0 0 0;
@@ -1509,7 +1589,8 @@ select:focus-visible {
   pointer-events: none;
 }
 
-.week-work-card {
+.week-work-card,
+.week-activity-card {
   height: calc(100% - 2px);
   max-height: 16px;
   min-width: 0;
@@ -1530,6 +1611,15 @@ select:focus-visible {
   white-space: nowrap;
 }
 
+.week-activity-card {
+  border-color: color-mix(in srgb, var(--activity-color) 68%, #52606d);
+  color: #354656;
+  background: var(--activity-color);
+  cursor: grab;
+}
+
+.week-activity-card:active { cursor: grabbing; }
+
 .week-slot-card.has-value {
   border-color: rgba(67, 73, 81, 0.15);
   background: var(--slot-color, #fff);
@@ -1542,7 +1632,7 @@ select:focus-visible {
 
 .week-slot-card > input {
   width: 100%;
-  height: 100%;
+  height: 14px;
   min-width: 0;
   padding: 0 42px 0 5px;
   border: 0;
@@ -1551,7 +1641,7 @@ select:focus-visible {
   color: #31343a;
   background: transparent;
   font-size: 9px;
-  line-height: 1;
+  line-height: 14px;
   text-overflow: ellipsis;
 }
 
@@ -2391,6 +2481,11 @@ select:focus-visible {
   .planner-header { padding: 14px 12px 12px; align-items: center; }
   .planner-header h1 { font-size: 22px; }
   .planner-header > div:first-child span { display: none; }
+  .planning-week .planner-header { min-height: 44px; padding: 6px; justify-content: flex-start; overflow-x: auto; }
+  .planning-week .planner-heading-tools,
+  .planning-week .planner-quick-tools,
+  .planning-week .planner-navigation { flex: none; }
+  .planning-week .planner-navigation { margin-left: auto; }
   .week-planner { padding: 0 6px 6px; }
   .week-schedule-scroll { max-height: none; border-radius: 5px; }
   .week-schedule-grid { min-width: 930px; grid-template-columns: 52px repeat(7, 125px); }
