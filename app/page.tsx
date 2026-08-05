@@ -1055,7 +1055,7 @@ function DiaryWorkspace({
           <article key={post.id} className="diary-post">
             <header>
               <div>
-                <time dateTime={post.createdAt}>{formatActivityDate(post.createdAt)}</time>
+                <time dateTime={post.createdAt}>{formatDiaryPostDate(post.createdAt)}</time>
                 {post.updatedAt && <small>editado {formatActivityDate(post.updatedAt)}</small>}
               </div>
               <div className="diary-post-actions">
@@ -1093,6 +1093,19 @@ function formatActivityDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Agora";
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatDiaryPostDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Agora";
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function CardModal({
