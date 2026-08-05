@@ -847,11 +847,13 @@ function RichTextEditor({
   onChange,
   ariaLabel = "Descrição do cartão",
   placeholder = "Escreva a descrição, links, listas ou observações…",
+  compact = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   ariaLabel?: string;
   placeholder?: string;
+  compact?: boolean;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Range | null>(null);
@@ -983,7 +985,7 @@ function RichTextEditor({
   }
 
   return (
-    <div className="rich-editor-shell">
+    <div className={`rich-editor-shell ${compact ? "rich-editor-compact" : ""}`}>
       <div className="rich-editor-toolbar" aria-label="Ferramentas de formatação">
         <select
           aria-label="Formato do texto"
@@ -1077,21 +1079,11 @@ const EMPTY_WORK_DIARY_DRAFT: WorkDiaryDraft = {
 };
 
 function hasWorkDiaryContent(draft: WorkDiaryDraft) {
-  return Object.values(draft).some((value) => value.trim().length > 0);
-}
-
-function escapeDiaryText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-    .replace(/\r?\n/g, "<br>");
+  return Object.values(draft).some(hasRichText);
 }
 
 function buildWorkDiaryContent(draft: WorkDiaryDraft) {
-  const field = (title: string, value: string) => `<h2>${title}:</h2><p>${escapeDiaryText(value.trim()) || "<br>"}</p>`;
+  const field = (title: string, value: string) => `<h2>${title}:</h2>${hasRichText(value) ? value : "<p><br></p>"}`;
   return `<div class="diary-work-entry">${field("Etapa do projeto trabalhada", draft.projectStage)}${field("Insights gerados", draft.insights)}${field("Próximos passos", draft.nextSteps)}</div>`;
 }
 
@@ -1163,18 +1155,18 @@ function DiaryWorkspace({
           </div>
         ) : (
           <div className="diary-work-template" role="tabpanel" aria-label="Postagem de trabalho">
-            <label>
+            <section className="diary-work-field">
               <span>Etapa do projeto trabalhada:</span>
-              <textarea value={workDraft.projectStage} onChange={(event) => setWorkDraft((current) => ({ ...current, projectStage: event.target.value }))} placeholder="Em qual etapa você trabalhou?" />
-            </label>
-            <label>
+              <RichTextEditor compact value={workDraft.projectStage} onChange={(projectStage) => setWorkDraft((current) => ({ ...current, projectStage }))} ariaLabel="Etapa do projeto trabalhada" placeholder="Em qual etapa você trabalhou?" />
+            </section>
+            <section className="diary-work-field">
               <span>Insights gerados:</span>
-              <textarea value={workDraft.insights} onChange={(event) => setWorkDraft((current) => ({ ...current, insights: event.target.value }))} placeholder="O que você descobriu ou aprendeu?" />
-            </label>
-            <label>
+              <RichTextEditor compact value={workDraft.insights} onChange={(insights) => setWorkDraft((current) => ({ ...current, insights }))} ariaLabel="Insights gerados" placeholder="O que você descobriu ou aprendeu?" />
+            </section>
+            <section className="diary-work-field">
               <span>Próximos passos:</span>
-              <textarea value={workDraft.nextSteps} onChange={(event) => setWorkDraft((current) => ({ ...current, nextSteps: event.target.value }))} placeholder="O que precisa acontecer depois?" />
-            </label>
+              <RichTextEditor compact value={workDraft.nextSteps} onChange={(nextSteps) => setWorkDraft((current) => ({ ...current, nextSteps }))} ariaLabel="Próximos passos" placeholder="O que precisa acontecer depois?" />
+            </section>
           </div>
         )}
         <div className="diary-composer-actions">
