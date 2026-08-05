@@ -992,6 +992,12 @@ select:focus-visible {
   transform: none;
 }
 
+.board-column.column-dragging {
+  z-index: 4;
+  opacity: 0.58;
+  box-shadow: 0 12px 24px rgba(18, 27, 43, 0.2);
+}
+
 .column-accent {
   display: none;
 }
@@ -1003,6 +1009,24 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
 }
+
+.column-drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.column-drag-handle:active { cursor: grabbing; }
+.column-drag-handle:focus-visible { outline: 2px solid rgba(81, 106, 137, 0.55); outline-offset: -2px; }
+
+.column-drag-icon {
+  flex: 0 0 auto;
+  color: #7b8088;
+  opacity: 0.42;
+  transition: opacity 120ms ease;
+}
+
+.column-drag-handle:hover .column-drag-icon { opacity: 0.9; }
 
 .column-header > div:first-child {
   display: flex;

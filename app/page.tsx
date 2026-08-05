@@ -17,6 +17,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -610,17 +611,36 @@ function BoardColumn({
   onOpenCard: (id: string) => void;
   onEditColumn: (columnId: string) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `column-${column.id}` });
+  const { setNodeRef: setCardDropRef, isOver } = useDroppable({
+    id: `column-${column.id}`,
+    data: { type: "card-column", columnId: column.id },
+  });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `sortable-column-${column.id}`,
+    data: { type: "column", columnId: column.id },
+  });
+  const style = {
+    "--column-accent": column.color,
+    transform: DndCSS.Transform.toString(transform),
+    transition,
+  } as CSSProperties;
 
   return (
     <section
       ref={setNodeRef}
-      className={`board-column ${isOver ? "column-over" : ""}`}
-      style={{ "--column-accent": column.color } as CSSProperties}
+      className={`board-column ${isOver ? "column-over" : ""} ${isDragging ? "column-dragging" : ""}`}
+      style={style}
     >
       <div className="column-accent" />
-      <header className="column-header">
+      <header
+        className="column-header column-drag-handle"
+        title="Segure e arraste para reordenar a coluna"
+        {...attributes}
+        {...listeners}
+        aria-label={`Mover coluna ${column.title}`}
+      >
         <div>
+          <GripVertical className="column-drag-icon" size={13} aria-hidden="true" />
           <h2>{column.title}</h2>
           <span>{cards.length.toString().padStart(2, "0")}</span>
         </div>
@@ -628,13 +648,15 @@ function BoardColumn({
           type="button"
           className="icon-button subtle"
           aria-label={`Editar coluna ${column.title}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
           onClick={() => onEditColumn(column.id)}
         >
           <MoreHorizontal size={19} />
         </button>
       </header>
 
-      <div className="card-list">
+      <div ref={setCardDropRef} className="card-list">
         <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
@@ -1685,7 +1707,9 @@ export default function Home() {
 
   function handleDragStart(boardId: string, event: DragStartEvent) {
     activateBoard(boardId);
-    setActiveDrag({ boardId, cardId: String(event.active.id) });
+    setActiveDrag(event.active.data.current?.type === "card"
+      ? { boardId, cardId: String(event.active.id) }
+      : null);
   }
 
   function handleDesktopDragEnd(event: DragEndEvent) {
@@ -1706,12 +1730,31 @@ export default function Home() {
     setActiveDrag(null);
     if (!overId || draggedId === overId) return;
 
+    if (event.active.data.current?.type === "column") {
+      const draggedColumnId = String(event.active.data.current.columnId);
+      setBoard((current) => {
+        const overColumnId = event.over?.data.current?.columnId
+          ? String(event.over.data.current.columnId)
+          : current.cards.some((card) => card.id === overId)
+            ? findColumnForCard(current, overId)?.id
+            : overId.replace(/^sortable-column-|^column-/, "");
+        if (!overColumnId || draggedColumnId === overColumnId) return current;
+        const oldIndex = current.columns.findIndex((column) => column.id === draggedColumnId);
+        const newIndex = current.columns.findIndex((column) => column.id === overColumnId);
+        if (oldIndex < 0 || newIndex < 0) return current;
+        return { ...current, columns: arrayMove(current.columns, oldIndex, newIndex) };
+      }, boardId);
+      return;
+    }
+
     setBoard((current) => {
       const sourceColumn = findColumnForCard(current, draggedId);
       if (!sourceColumn) return current;
       const overCard = current.cards.find((card) => card.id === overId);
       const targetColumn = overCard
         ? findColumnForCard(current, overCard.id)
+        : event.over?.data.current?.columnId
+          ? current.columns.find((column) => column.id === event.over?.data.current?.columnId)
         : overId.startsWith("column-")
           ? current.columns.find((column) => column.id === overId.replace("column-", ""))
           : undefined;
@@ -1901,10 +1944,12 @@ export default function Home() {
                   <SortableDesktop key={project.id} project={project} onCustomize={() => { activateBoard(project.id); setShowCustomizer(true); }}>
                 <DndContext id={`vinello-board-dnd-${project.id}`} sensors={sensors} collisionDetection={closestCorners} onDragStart={(event) => handleDragStart(project.id, event)} onDragEnd={(event) => handleDragEnd(project.id, event)} onDragCancel={() => setActiveDrag(null)}>
                   <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
-                    {project.columns.map((column) => {
-                      const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
-                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
-                    })}
+                    <SortableContext items={project.columns.map((column) => `sortable-column-${column.id}`)} strategy={horizontalListSortingStrategy}>
+                      {project.columns.map((column) => {
+                        const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
+                        return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
+                      })}
+                    </SortableContext>
                     <button type="button" className="add-column-button" aria-label={`Adicionar lista ao desktop ${project.title}`} title="Adicionar outra lista" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><Plus size={18} /></button>
                   </div>
                   <DragOverlay>{activeDrag?.boardId === project.id && activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
