@@ -1,8 +1,4 @@
 allowBuilds:
+  '@firebase/util': true
   esbuild: true
-  sharp: true
-  workerd: true
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - workerd
+  protobufjs: true

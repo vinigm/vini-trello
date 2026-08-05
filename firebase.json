@@ -1,0 +1,13 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Vinello",
+        "supportEmail": "vinigm@gmail.com"
+      }
+    }
+  }
+}

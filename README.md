@@ -9,8 +9,10 @@ Um quadro Kanban pessoal, responsivo e colorido para organizar ideias, prioridad
 - criação, edição e exclusão de cartões e colunas;
 - busca e filtro por prioridade;
 - quatro temas visuais e cores personalizáveis;
-- persistência online com Cloudflare D1;
+- autenticação com Google e persistência online com Firebase;
 - layout adaptado para desktop e celular.
+
+O site é publicado automaticamente no GitHub Pages a cada atualização da branch `main`.
 
 ## Desenvolvimento local
 
@@ -28,4 +30,4 @@ pnpm build
 pnpm test
 ```
 
-As migrations do banco ficam em `drizzle/` e são geradas com `pnpm db:generate`.
+As regras do banco ficam em `firestore.rules` e garantem que cada pessoa acesse apenas o próprio quadro.

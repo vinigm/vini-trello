@@ -22,12 +22,19 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS as DndCSS } from "@dnd-kit/utilities";
 import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type User,
+} from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
   ArrowLeft,
   ArrowRight,
   Bell,
   CalendarDays,
   Check,
-  ChevronDown,
   Circle,
   Cloud,
   CloudOff,
@@ -36,13 +43,14 @@ import {
   LayoutDashboard,
   ListFilter,
   LoaderCircle,
+  LogIn,
+  LogOut,
   MoreHorizontal,
   Palette,
   Plus,
   Search,
   SlidersHorizontal,
   Sparkles,
-  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -54,6 +62,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { auth, db } from "../src/firebase";
 
 type Priority = "low" | "medium" | "high";
 type Theme = "peach" | "lilac" | "ocean" | "midnight";
@@ -205,6 +214,16 @@ function makeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+function getInitials(user: User) {
+  const source = user.displayName || user.email || "Vinello";
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toLocaleUpperCase("pt-BR");
+}
+
 function findColumnForCard(board: BoardState, cardId: string) {
   return board.columns.find((column) => column.cardIds.includes(cardId));
 }
@@ -242,11 +261,19 @@ function SortableCard({
   };
 
   return (
-    <article
+    <div
       ref={setNodeRef}
       style={style}
       className={`task-card ${isDragging ? "is-dragging" : ""}`}
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(card.id)}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onOpen(card.id);
+        }
+      }}
     >
       <div className="card-topline">
         <span
@@ -285,7 +312,7 @@ function SortableCard({
           <Circle size={9} fill="currentColor" />
         </span>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -401,13 +428,13 @@ function CardModal({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop">
+      <button type="button" className="backdrop-dismiss" aria-label="Fechar editor do cartão" onClick={onClose} />
       <section
         className="modal-card card-editor"
         role="dialog"
         aria-modal="true"
         aria-labelledby="card-modal-title"
-        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-heading">
           <div className="modal-icon"><Columns3 size={19} /></div>
@@ -424,7 +451,6 @@ function CardModal({
           <label className="field full-field">
             <span>Título</span>
             <input
-              autoFocus
               value={draft.title}
               onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               placeholder="Ex.: Planejar a próxima semana"
@@ -532,15 +558,16 @@ function ColumnModal({
   const [color, setColor] = useState(column?.color ?? COLUMN_COLORS[0]);
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="modal-card column-editor" role="dialog" aria-modal="true" aria-labelledby="column-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="modal-backdrop">
+      <button type="button" className="backdrop-dismiss" aria-label="Fechar editor da coluna" onClick={onClose} />
+      <section className="modal-card column-editor" role="dialog" aria-modal="true" aria-labelledby="column-modal-title">
         <div className="modal-heading">
           <div className="modal-icon"><Columns3 size={19} /></div>
           <div><span>{column ? "Personalizar coluna" : "Nova coluna"}</span><h2 id="column-modal-title">{column ? column.title : "Crie uma nova etapa"}</h2></div>
           <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}><X size={20} /></button>
         </div>
         <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) onSave(title.trim(), color); }}>
-          <label className="field full-field"><span>Nome da coluna</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Aguardando" required /></label>
+          <label className="field full-field"><span>Nome da coluna</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Aguardando" required /></label>
           <fieldset className="color-fieldset"><legend>Cor de destaque</legend><div className="color-row">
             {COLUMN_COLORS.map((choice) => <button key={choice} type="button" className={`color-choice ${color === choice ? "selected" : ""}`} style={{ background: choice }} aria-label={`Escolher cor ${choice}`} onClick={() => setColor(choice)}>{color === choice && <Check size={15} />}</button>)}
           </div></fieldset>
@@ -560,6 +587,10 @@ export default function Home() {
   const [board, setBoard] = useState<BoardState>(DEFAULT_BOARD);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
   const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [query, setQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
@@ -576,13 +607,22 @@ export default function Home() {
   );
 
   useEffect(() => {
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      if (!nextUser) setLoaded(false);
+      setAuthReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
     let active = true;
     async function loadBoard() {
       try {
-        const response = await fetch("/api/board", { cache: "no-store" });
-        if (!response.ok) throw new Error("Não foi possível carregar o quadro");
-        const payload = (await response.json()) as { board: BoardState | null };
-        if (active && payload.board) setBoard(payload.board);
+        const snapshot = await getDoc(doc(db, "users", user!.uid, "boards", "main"));
+        const payload = snapshot.data() as { state?: BoardState } | undefined;
+        if (active && payload?.state) setBoard(payload.state);
         if (active) setSaveStatus("saved");
       } catch {
         if (active) setSaveStatus("offline");
@@ -592,27 +632,45 @@ export default function Home() {
     }
     loadBoard();
     return () => { active = false; };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !user) return;
     const requestNumber = ++saveRequest.current;
-    setSaveStatus("saving");
     const timer = window.setTimeout(async () => {
+      setSaveStatus("saving");
       try {
-        const response = await fetch("/api/board", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ board }),
-        });
-        if (!response.ok) throw new Error("Falha ao salvar");
+        await setDoc(
+          doc(db, "users", user.uid, "boards", "main"),
+          { state: board, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
         if (saveRequest.current === requestNumber) setSaveStatus("saved");
       } catch {
         if (saveRequest.current === requestNumber) setSaveStatus("offline");
       }
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [board, loaded]);
+  }, [board, loaded, user]);
+
+  async function handleSignIn() {
+    setAuthBusy(true);
+    setAuthError("");
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      await signInWithPopup(auth, provider);
+    } catch {
+      setAuthError("Não foi possível entrar. Confira se os pop-ups estão liberados e tente novamente.");
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut(auth);
+    setBoard(DEFAULT_BOARD);
+    setSaveStatus("loading");
+  }
 
   const filteredCards = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
@@ -754,6 +812,42 @@ export default function Home() {
     setColumnModal(null);
   }
 
+  if (!authReady) {
+    return (
+      <main className="auth-screen">
+        <div className="auth-card auth-loading-card">
+          <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
+          <LoaderCircle className="spin" size={25} />
+          <p>Preparando seu espaço…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <div className="auth-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>vinello</strong></div>
+          <span className="auth-eyebrow">Seu Kanban pessoal</span>
+          <h1>Organize do<br />seu jeito.</h1>
+          <p>Suas ideias, tarefas e projetos em um quadro colorido que acompanha você no computador e no celular.</p>
+          <div className="auth-features"><span><Check size={15} /> Sincronização automática</span><span><Check size={15} /> Espaço protegido</span><span><Check size={15} /> Acesso em qualquer dispositivo</span></div>
+          <button type="button" className="google-signin-button" disabled={authBusy} onClick={handleSignIn}>
+            {authBusy ? <LoaderCircle className="spin" size={19} /> : <LogIn size={19} />}
+            Entrar com Google
+          </button>
+          {authError && <div className="auth-error" role="alert">{authError}</div>}
+          <small>Somente você tem acesso aos seus cartões.</small>
+        </section>
+        <div className="auth-board-preview" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
+      </main>
+    );
+  }
+
+  const initials = getInitials(user);
+  const displayName = user.displayName?.split(" ")[0] || "Vinicius";
+
   return (
     <main className={`app-shell theme-${board.theme}`}>
       <aside className="sidebar">
@@ -779,7 +873,7 @@ export default function Home() {
 
         <div className="sidebar-bottom">
           <button type="button" className="nav-item" onClick={() => setShowCustomizer(true)}><Palette size={19} /><span>Personalizar</span></button>
-          <div className="profile-row"><div className="avatar">VG</div><div><strong>Vinicius</strong><span>Espaço pessoal</span></div><ChevronDown size={16} /></div>
+          <button type="button" className="profile-row" onClick={handleSignOut} title="Sair da conta"><div className="avatar">{initials}</div><div><strong>{displayName}</strong><span>{user.email}</span></div><LogOut size={16} /></button>
         </div>
       </aside>
 
@@ -800,7 +894,7 @@ export default function Home() {
               <span>{saveStatus === "saving" ? "Salvando" : saveStatus === "saved" ? "Tudo salvo" : saveStatus === "offline" ? "Sem conexão" : "Carregando"}</span>
             </div>
             <button type="button" className="icon-button notification-button" aria-label="Notificações"><Bell size={19} /><i /></button>
-            <button type="button" className="avatar avatar-button" aria-label="Abrir perfil">VG</button>
+            <button type="button" className="avatar avatar-button" aria-label="Sair da conta" title="Sair da conta" onClick={handleSignOut}>{initials}</button>
           </div>
         </header>
 
@@ -869,8 +963,9 @@ export default function Home() {
       )}
 
       {showCustomizer && (
-        <div className="customizer-backdrop" role="presentation" onMouseDown={() => setShowCustomizer(false)}>
-          <aside className="customizer-panel" role="dialog" aria-modal="true" aria-labelledby="customizer-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="customizer-backdrop">
+          <button type="button" className="backdrop-dismiss" aria-label="Fechar personalização" onClick={() => setShowCustomizer(false)} />
+          <aside className="customizer-panel" role="dialog" aria-modal="true" aria-labelledby="customizer-title">
             <div className="customizer-header"><div><span>Seu espaço, suas regras</span><h2 id="customizer-title">Personalizar quadro</h2></div><button type="button" className="icon-button" aria-label="Fechar" onClick={() => setShowCustomizer(false)}><X size={20} /></button></div>
             <label className="field full-field"><span>Nome do quadro</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
             <div className="theme-section"><span>Tema do fundo</span><div className="theme-grid">{THEME_OPTIONS.map((theme) => (
