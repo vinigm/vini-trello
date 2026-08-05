@@ -1961,6 +1961,45 @@ select:focus-visible {
 .rich-check-item { min-height: 27px; display: flex; align-items: center; gap: 7px; }
 .rich-check-item input { width: 15px; height: 15px; accent-color: #55779f; }
 
+.diary-workspace {
+  min-width: 0;
+  min-height: 0;
+  padding: 22px;
+  flex: 1;
+  overflow-y: auto;
+  color: #25282d;
+  background: #f5f1e7;
+}
+
+.diary-heading,
+.diary-editor {
+  width: min(1080px, 100%);
+  margin-inline: auto;
+}
+
+.diary-heading {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diary-icon {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(53, 71, 100, 0.15);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #354764;
+  background: #fff;
+}
+
+.diary-heading h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.035em; }
+.diary-heading p { margin: 2px 0 0; color: #77746d; font-size: 10px; }
+.diary-editor .rich-editor-shell { box-shadow: 0 8px 26px rgba(62, 57, 48, 0.06); }
+.diary-editor .rich-description-editor { min-height: calc(100dvh - 190px); padding: 22px; font-size: 14px; line-height: 1.7; }
+
 .activity-journal { padding-top: 2px; }
 .activity-composer { padding: 7px 8px; border: 1px solid rgba(46, 43, 48, 0.13); border-radius: 9px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; background: #fff; }
 .activity-composer textarea { width: 100%; min-height: 38px; max-height: 72px; padding: 2px 0; border: 0; outline: 0; resize: none; color: #303238; background: transparent; font-size: 12px; line-height: 1.45; }
@@ -2516,6 +2555,10 @@ select:focus-visible {
   .card-drawer-content { padding: 16px 13px; }
   .rich-description-editor { min-height: 230px; }
   .rich-editor-toolbar { max-height: 82px; overflow-y: auto; }
+  .diary-workspace { padding: 10px 8px; }
+  .diary-heading { margin-bottom: 8px; }
+  .diary-heading p { display: none; }
+  .diary-editor .rich-description-editor { min-height: calc(100dvh - 190px); padding: 15px; font-size: 13px; }
   .card-drawer-actions { min-height: 60px; padding: 9px 13px; }
 }
 

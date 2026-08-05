@@ -128,6 +128,7 @@ type WorkspaceState = {
   plannerSlotColors: Record<string, string>;
   plannerWorkSlots: string[];
   plannerActivities: Record<string, PlannerActivity[]>;
+  diaryContent: string;
 };
 
 type PlannerActivity = {
@@ -441,6 +442,7 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
       plannerSlotColors,
       plannerWorkSlots: [...plannerWorkSlots],
       plannerActivities: workspace.plannerActivities ?? {},
+      diaryContent: workspace.diaryContent ?? "",
     };
   }
 
@@ -460,6 +462,7 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     plannerSlotColors: workspace.plannerSlotColors ?? {},
     plannerWorkSlots: workspace.plannerWorkSlots ?? [],
     plannerActivities: workspace.plannerActivities ?? {},
+    diaryContent: workspace.diaryContent ?? "",
   };
 }
 
@@ -477,6 +480,7 @@ const DEFAULT_WORKSPACE = migrateWorkspace({
   plannerSlotColors: {},
   plannerWorkSlots: [],
   plannerActivities: {},
+  diaryContent: "",
 });
 
 function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
@@ -502,6 +506,7 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       plannerSlotColors: {},
       plannerWorkSlots: [],
       plannerActivities: {},
+      diaryContent: "",
     });
   }
 
@@ -779,7 +784,17 @@ type CopiedTextFormat = {
   alignment: "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
 };
 
-function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function RichTextEditor({
+  value,
+  onChange,
+  ariaLabel = "Descrição do cartão",
+  placeholder = "Escreva a descrição, links, listas ou observações…",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel?: string;
+  placeholder?: string;
+}) {
   const editorRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Range | null>(null);
   const copiedFormatRef = useRef<CopiedTextFormat | null>(null);
@@ -934,7 +949,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
         role="textbox"
         tabIndex={0}
         aria-multiline="true"
-        data-placeholder="Escreva a descrição, links, listas ou observações…"
+        data-placeholder={placeholder}
         onInput={syncValue}
         onKeyUp={rememberSelection}
         onMouseUp={applyCopiedFormat}
@@ -947,9 +962,31 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
             window.requestAnimationFrame(syncValue);
           }
         }}
-        aria-label="Descrição do cartão"
+        aria-label={ariaLabel}
       />
     </div>
+  );
+}
+
+function DiaryWorkspace({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <section className="diary-workspace">
+      <header className="diary-heading">
+        <div className="diary-icon"><FileText size={20} /></div>
+        <div>
+          <h1>Diário</h1>
+          <p>Registre o que você fez, decisões, ideias e próximos passos.</p>
+        </div>
+      </header>
+      <div className="diary-editor">
+        <RichTextEditor
+          value={value}
+          onChange={onChange}
+          ariaLabel="Conteúdo do diário"
+          placeholder="Comece a escrever seu diário…"
+        />
+      </div>
+    </section>
   );
 }
 
@@ -1776,7 +1813,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [activeView, setActiveView] = useState<"board" | "planning">("board");
+  const [activeView, setActiveView] = useState<"board" | "planning" | "diary">("board");
   const [planningMode, setPlanningMode] = useState<PlanningMode>("week");
   const [plannerCursor, setPlannerCursor] = useState(() => new Date());
   const [query, setQuery] = useState("");
@@ -2075,10 +2112,6 @@ export default function Home() {
     () => [...visibleIdsByBoard.values()].reduce((total, ids) => total + ids.size, 0),
     [visibleIdsByBoard],
   );
-  const highPriorityCount = useMemo(
-    () => workspaceState.boards.reduce((total, project) => total + project.cards.filter((card) => card.priority === "high").length, 0),
-    [workspaceState.boards],
-  );
   const activeCard = activeDrag
     ? workspaceState.boards.find((project) => project.id === activeDrag.boardId)?.cards.find((card) => card.id === activeDrag.cardId)
     : undefined;
@@ -2273,7 +2306,7 @@ export default function Home() {
           <nav className="top-nav" aria-label="Navegação principal">
             <button type="button" className={`top-nav-item ${activeView === "board" && priorityFilter === "all" ? "active" : ""}`} onClick={() => { setActiveView("board"); setQuery(""); setPriorityFilter("all"); }}><LayoutDashboard size={17} /><span>Quadro</span></button>
             <button type="button" className={`top-nav-item ${activeView === "planning" ? "active" : ""}`} onClick={() => { setActiveView("planning"); setQuery(""); setPriorityFilter("all"); }}><CalendarDays size={17} /><span>Planejamento</span></button>
-            <button type="button" className={`top-nav-item ${activeView === "board" && priorityFilter === "high" ? "active" : ""}`} onClick={() => { setActiveView("board"); setPriorityFilter("high"); }}><Sparkles size={17} /><span>Foco</span><em>{highPriorityCount}</em></button>
+            <button type="button" className={`top-nav-item ${activeView === "diary" ? "active" : ""}`} onClick={() => { setActiveView("diary"); setQuery(""); setPriorityFilter("all"); }}><FileText size={17} /><span>Diário</span></button>
           </nav>
           {activeView === "board" && <button type="button" className="add-desktop-button" aria-label="Adicionar desktop" title="Adicionar desktop" onClick={() => setShowProjectModal(true)}><Plus size={18} /></button>}
           {activeView === "board" && (
@@ -2297,7 +2330,7 @@ export default function Home() {
           {activeView === "board" && <div className="search-wrap">
             <Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" /><kbd>⌘ K</kbd>
           </div>}
-          <div className={`top-actions ${activeView === "planning" ? "push-right" : ""}`}>
+          <div className={`top-actions ${activeView !== "board" ? "push-right" : ""}`}>
             <div className={`save-status status-${saveStatus}`} title={saveStatus === "offline" ? "Alterações ainda não sincronizadas" : "Sincronização do quadro"}>
               {saveStatus === "saving" && <LoaderCircle size={16} className="spin" />}
               {saveStatus === "saved" && <Cloud size={16} />}
@@ -2312,6 +2345,8 @@ export default function Home() {
 
         {activeView === "planning" ? (
           <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} activities={workspaceState.plannerActivities} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} onAddActivity={addPlannerActivity} onMoveActivity={movePlannerActivity} onRemoveActivity={removePlannerActivity} />
+        ) : activeView === "diary" ? (
+          <DiaryWorkspace value={workspaceState.diaryContent} onChange={(diaryContent) => setWorkspaceState((current) => ({ ...current, diaryContent }))} />
         ) : <>
           {(query || priorityFilter !== "all") && (
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} nos desktops visíveis</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
