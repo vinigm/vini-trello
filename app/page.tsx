@@ -53,6 +53,8 @@ import {
 import {
   FormEvent,
   type CSSProperties,
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
   useMemo,
@@ -836,6 +838,10 @@ function ProjectModal({
 type PlanningMode = "week" | "month" | "year";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const WEEK_TIME_SLOTS = Array.from({ length: 35 }, (_, index) => {
+  const minutes = 6 * 60 + index * 30;
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+});
 
 function dateKey(date: Date) {
   const year = date.getFullYear();
@@ -869,6 +875,109 @@ function monthCells(date: Date) {
   ];
 }
 
+function weekSlotKey(date: Date, time: string) {
+  return `week:${dateKey(date)}:${time}`;
+}
+
+function WeeklyPlannerGrid({
+  days,
+  notes,
+  onChangeNote,
+}: {
+  days: Date[];
+  notes: Record<string, string>;
+  onChangeNote: (key: string, value: string) => void;
+}) {
+  const cellRefs = useRef(new Map<string, HTMLInputElement>());
+  const today = dateKey(new Date());
+
+  function focusCell(row: number, column: number) {
+    const boundedRow = Math.max(0, Math.min(WEEK_TIME_SLOTS.length - 1, row));
+    const boundedColumn = Math.max(0, Math.min(days.length - 1, column));
+    const key = weekSlotKey(days[boundedColumn], WEEK_TIME_SLOTS[boundedRow]);
+    cellRefs.current.get(key)?.focus();
+  }
+
+  function handlePaste(event: ReactClipboardEvent<HTMLInputElement>, startRow: number, startColumn: number) {
+    const clipboardText = event.clipboardData.getData("text/plain").replace(/\r/g, "");
+    const rows = clipboardText.split("\n");
+    if (rows.length > 1 && rows.at(-1) === "") rows.pop();
+    event.preventDefault();
+
+    let lastRow = startRow;
+    let lastColumn = startColumn;
+    rows.forEach((row, rowOffset) => {
+      row.split("\t").forEach((value, columnOffset) => {
+        const targetRow = startRow + rowOffset;
+        const targetColumn = startColumn + columnOffset;
+        if (targetRow >= WEEK_TIME_SLOTS.length || targetColumn >= days.length) return;
+        onChangeNote(weekSlotKey(days[targetColumn], WEEK_TIME_SLOTS[targetRow]), value);
+        lastRow = targetRow;
+        lastColumn = targetColumn;
+      });
+    });
+    window.requestAnimationFrame(() => focusCell(lastRow, lastColumn));
+  }
+
+  function handleCopy(event: ReactClipboardEvent<HTMLInputElement>, value: string) {
+    if (event.currentTarget.selectionStart !== event.currentTarget.selectionEnd) return;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", value);
+  }
+
+  function handleCellKeyDown(event: ReactKeyboardEvent<HTMLInputElement>, row: number, column: number) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      focusCell(row + (event.shiftKey ? -1 : 1), column);
+    }
+  }
+
+  return (
+    <div className="week-planner">
+      <div className="week-schedule-scroll">
+        <div className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
+          <div className="week-schedule-corner" role="columnheader">Horário</div>
+          {days.map((date, index) => (
+            <header key={dateKey(date)} className={`week-schedule-day ${dateKey(date) === today ? "is-today" : ""}`} role="columnheader">
+              <strong>{WEEKDAYS[index]}</strong>
+              <span>{String(date.getDate()).padStart(2, "0")}/{String(date.getMonth() + 1).padStart(2, "0")}</span>
+            </header>
+          ))}
+
+          {WEEK_TIME_SLOTS.map((time, row) => {
+            const isFullHour = time.endsWith(":00");
+            return (
+              <div key={time} className="week-schedule-row" role="row">
+                <div className={`week-time-label ${isFullHour ? "is-full-hour" : ""}`} role="rowheader">{time}</div>
+                {days.map((date, column) => {
+                  const key = weekSlotKey(date, time);
+                  const value = notes[key] ?? "";
+                  return (
+                    <div key={key} className={`week-slot ${isFullHour ? "is-full-hour" : ""}`} role="gridcell">
+                      <input
+                        ref={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
+                        className={value ? "has-value" : ""}
+                        value={value}
+                        title={value}
+                        onChange={(event) => onChangeNote(key, event.target.value)}
+                        onPaste={(event) => handlePaste(event, row, column)}
+                        onCopy={(event) => handleCopy(event, value)}
+                        onKeyDown={(event) => handleCellKeyDown(event, row, column)}
+                        aria-label={`${WEEKDAYS[column]}, ${dateKey(date)}, às ${time}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="week-schedule-help">Cole células do Excel ou Google Planilhas diretamente na grade. Tab avança e Enter desce no mesmo dia.</p>
+    </div>
+  );
+}
+
 function PlanningWorkspace({
   mode,
   cursor,
@@ -894,7 +1003,7 @@ function PlanningWorkspace({
   };
 
   return (
-    <section className="planning-workspace">
+    <section className={`planning-workspace planning-${mode}`}>
       <nav className="planning-subnav" aria-label="Visualização do planejamento">
         {(["week", "month", "year"] as PlanningMode[]).map((item) => (
           <button key={item} type="button" className={mode === item ? "active" : ""} onClick={() => onChangeMode(item)}>
@@ -913,17 +1022,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <div className="week-planner">
-          {weekDays.map((date, index) => {
-            const key = dateKey(date);
-            return (
-              <article key={key} className="week-day">
-                <header><strong>{WEEKDAYS[index]}</strong><span>{String(date.getDate()).padStart(2, "0")}</span></header>
-                <textarea value={notes[key] ?? ""} onChange={(event) => onChangeNote(key, event.target.value)} placeholder="Planejar o dia…" aria-label={`Planejamento de ${key}`} />
-              </article>
-            );
-          })}
-        </div>
+        <WeeklyPlannerGrid days={weekDays} notes={notes} onChangeNote={onChangeNote} />
       )}
 
       {mode === "month" && (
