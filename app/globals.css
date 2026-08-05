@@ -678,7 +678,7 @@ select:focus-visible {
   margin: 0;
   overflow: hidden;
   color: #fff;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
@@ -935,7 +935,7 @@ select:focus-visible {
 
 .column-header h2 {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -946,7 +946,7 @@ select:focus-visible {
   border-radius: 0;
   color: var(--muted);
   background: transparent;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   text-align: center;
 }
@@ -963,8 +963,8 @@ select:focus-visible {
 }
 
 .task-card {
-  min-height: 32px;
-  padding: 7px 8px;
+  min-height: 36px;
+  padding: 8px 9px;
   border: 1px solid #d4d7dc;
   border-radius: 7px;
   display: flex;
@@ -986,9 +986,9 @@ select:focus-visible {
 
 .task-card::before {
   content: "";
-  width: 12px;
-  height: 12px;
-  margin-top: 1px;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
   border: 1px solid #707985;
   border-radius: 50%;
   flex: 0 0 auto;
@@ -1030,10 +1030,10 @@ select:focus-visible {
 .task-card h3 {
   margin: 0;
   flex: 1;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 1.35;
-  letter-spacing: -0.015em;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
 }
 
 .task-card > h3:first-child { margin-top: 0; }
@@ -1087,7 +1087,7 @@ select:focus-visible {
   gap: 6px;
   color: var(--muted);
   background: transparent;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -1768,7 +1768,7 @@ select:focus-visible {
   .filter-summary { margin: -2px 10px 9px; }
   .desktop-board { padding: 6px 0 8px; }
   .desktop-title-bar { min-height: 34px; margin: 0 8px 6px; padding-left: 9px; }
-  .desktop-title-bar h1 { font-size: 14px; }
+  .desktop-title-bar h1 { font-size: 15px; }
   .desktop-settings-button { width: 27px; height: 27px; }
   .board-scroll {
     padding: 0 9px 12px;
@@ -1782,7 +1782,7 @@ select:focus-visible {
     max-height: calc(100dvh - 178px);
   }
   .task-card { padding: 8px 9px; }
-  .task-card h3 { font-size: 12px; }
+  .task-card h3 { font-size: 13px; }
   .add-column-button { width: 40px; min-width: 40px; }
   .planning-subnav { min-height: 42px; padding-inline: 8px; }
   .planning-subnav button { flex: 1; padding-inline: 8px; }
