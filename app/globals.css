@@ -634,10 +634,11 @@ select:focus-visible {
   min-width: 0;
   padding: 7px 0 9px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  background: var(--desktop-surface);
+  background: transparent;
 }
 
 .desktop-board:last-child { border-bottom: 0; }
+.desktop-board.desktop-dragging { position: relative; z-index: 15; opacity: 0.72; }
 
 .desktop-title-bar {
   min-height: 34px;
@@ -650,9 +651,28 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.13);
+  background: color-mix(in srgb, var(--desktop-accent) 22%, #4b5b75);
   box-shadow: none;
 }
+
+.desktop-drag-handle {
+  width: 26px;
+  height: 28px;
+  margin-left: -5px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.desktop-drag-handle:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+.desktop-drag-handle:active { cursor: grabbing; }
 
 .desktop-title-bar h1 {
   margin: 0;
@@ -663,6 +683,7 @@ select:focus-visible {
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
 .desktop-settings-button {
@@ -854,9 +875,7 @@ select:focus-visible {
 .board-scroll {
   min-height: 0;
   padding: 0 6px 7px;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 238px;
+  display: flex;
   align-items: start;
   gap: 8px;
   flex: 1;
@@ -872,8 +891,9 @@ select:focus-visible {
 .board-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.24); border-radius: 99px; }
 
 .board-column {
-  width: 238px;
-  min-width: 238px;
+  width: 218px;
+  min-width: 218px;
+  flex: 0 0 218px;
   min-height: 0;
   max-height: calc(100vh - 196px);
   position: relative;
@@ -884,7 +904,7 @@ select:focus-visible {
   flex-direction: column;
   overflow: hidden;
   scroll-snap-align: start;
-  background: #e8eaed;
+  background: var(--column-accent, #e8eaed);
   box-shadow: none;
   transition: transform 170ms ease, border-color 170ms ease;
 }
@@ -944,7 +964,7 @@ select:focus-visible {
 
 .task-card {
   min-height: 32px;
-  padding: 7px 9px;
+  padding: 7px 8px;
   border: 1px solid #d4d7dc;
   border-radius: 7px;
   display: flex;
@@ -977,7 +997,7 @@ select:focus-visible {
 .task-card.is-dragging { opacity: 0.35; }
 .task-card:active { cursor: grabbing; }
 .task-card:focus-visible { outline: 2px solid rgba(118, 93, 212, 0.48); outline-offset: 2px; }
-.card-ghost { width: 226px; transform: rotate(1deg); opacity: 0.96; box-shadow: 0 10px 24px rgba(14, 24, 40, 0.2); }
+.card-ghost { width: 206px; transform: rotate(1deg); opacity: 0.96; box-shadow: 0 10px 24px rgba(14, 24, 40, 0.2); }
 
 .card-topline {
   min-height: 19px;
@@ -1752,13 +1772,13 @@ select:focus-visible {
   .desktop-settings-button { width: 27px; height: 27px; }
   .board-scroll {
     padding: 0 9px 12px;
-    grid-auto-columns: calc(100vw - 28px);
     gap: 8px;
     scroll-snap-type: x mandatory;
   }
   .board-column {
     width: calc(100vw - 28px);
     min-width: calc(100vw - 28px);
+    flex-basis: calc(100vw - 28px);
     max-height: calc(100dvh - 178px);
   }
   .task-card { padding: 8px 9px; }

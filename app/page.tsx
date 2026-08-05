@@ -38,6 +38,7 @@ import {
   Cloud,
   CloudOff,
   Columns3,
+  GripVertical,
   LayoutDashboard,
   LoaderCircle,
   LogIn,
@@ -52,6 +53,7 @@ import {
 import {
   FormEvent,
   type CSSProperties,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -99,7 +101,7 @@ type WorkspaceState = {
 type SaveStatus = "loading" | "saving" | "saved" | "offline";
 
 const LABEL_COLORS = ["#f26b5f", "#f4a340", "#8d79e8", "#38a88f", "#4d8fd9"];
-const COLUMN_COLORS = ["#f47768", "#9b87ef", "#f3b94f", "#4fbea6", "#5f9fe6", "#ef85b2"];
+const COLUMN_COLORS = ["#f8dddd", "#dce8f4", "#dcecdf", "#f3ead1", "#ece2f3", "#e5e7eb", "#d9e8e7", "#ebe6df"];
 
 const DEFAULT_BOARD: BoardState = {
   id: "pessoal",
@@ -201,16 +203,16 @@ const DEFAULT_BOARD: BoardState = {
   ],
 };
 
-const WORKSPACE_SCHEMA_VERSION = 2;
+const WORKSPACE_SCHEMA_VERSION = 3;
 
 const STANDARD_COLUMNS = [
-  { key: "todo", title: "A fazer", color: "#8793a3" },
-  { key: "doing", title: "Em andamento", color: "#8793a3" },
-  { key: "done", title: "Concluído", color: "#8793a3" },
-  { key: "september", title: "Setembro", color: "#8793a3" },
-  { key: "october", title: "Outubro", color: "#8793a3" },
-  { key: "november", title: "Novembro", color: "#8793a3" },
-  { key: "december", title: "Dezembro", color: "#8793a3" },
+  { key: "todo", title: "A fazer", color: "#f8dddd" },
+  { key: "doing", title: "Fazendo", color: "#dce8f4" },
+  { key: "done", title: "Feito", color: "#dcecdf" },
+  { key: "september", title: "Setembro", color: "#e8eaed" },
+  { key: "october", title: "Outubro", color: "#e8eaed" },
+  { key: "november", title: "Novembro", color: "#e8eaed" },
+  { key: "december", title: "Dezembro", color: "#e8eaed" },
 ] as const;
 
 const TRELLO_TASKS: Record<string, { todo?: string[]; doing?: string[]; done?: string[] }> = {
@@ -280,8 +282,8 @@ function createBlankBoard(id: string, title: string, theme: Theme): BoardState {
 
 function getStandardColumnKey(title: string) {
   const normalized = normalizeKey(title);
-  if (normalized.includes("andamento")) return "doing";
-  if (normalized.includes("conclu")) return "done";
+  if (normalized.includes("andamento") || normalized === "fazendo") return "doing";
+  if (normalized.includes("conclu") || normalized === "feito") return "done";
   if (normalized.includes("setembro")) return "september";
   if (normalized.includes("outubro")) return "october";
   if (normalized.includes("novembro")) return "november";
@@ -565,6 +567,38 @@ function BoardColumn({
         <Plus size={17} />
         Adicionar cartão
       </button>
+    </section>
+  );
+}
+
+function SortableDesktop({
+  project,
+  onCustomize,
+  children,
+}: {
+  project: BoardState;
+  onCustomize: () => void;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `desktop-${project.id}`,
+    data: { type: "desktop", boardId: project.id },
+  });
+  const style: CSSProperties = {
+    "--desktop-accent": THEME_ACCENTS[project.theme],
+    "--desktop-surface": THEME_SURFACES[project.theme],
+    transform: DndCSS.Transform.toString(transform),
+    transition,
+  } as CSSProperties;
+
+  return (
+    <section ref={setNodeRef} className={`desktop-board ${isDragging ? "desktop-dragging" : ""}`} style={style}>
+      <header className="desktop-title-bar">
+        <button type="button" className="desktop-drag-handle" aria-label={`Mover desktop ${project.title}`} title="Segure e arraste para reordenar" {...attributes} {...listeners}><GripVertical size={16} /></button>
+        <h1>{project.title}</h1>
+        <button type="button" className="desktop-settings-button" aria-label={`Personalizar desktop ${project.title}`} title="Personalizar desktop" onClick={onCustomize}><SlidersHorizontal size={15} /></button>
+      </header>
+      {children}
     </section>
   );
 }
@@ -1100,6 +1134,18 @@ export default function Home() {
     setActiveDrag({ boardId, cardId: String(event.active.id) });
   }
 
+  function handleDesktopDragEnd(event: DragEndEvent) {
+    const activeId = String(event.active.id).replace(/^desktop-/, "");
+    const overId = event.over ? String(event.over.id).replace(/^desktop-/, "") : null;
+    if (!overId || activeId === overId) return;
+    setWorkspaceState((current) => {
+      const oldIndex = current.boards.findIndex((project) => project.id === activeId);
+      const newIndex = current.boards.findIndex((project) => project.id === overId);
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return { ...current, boards: arrayMove(current.boards, oldIndex, newIndex) };
+    });
+  }
+
   function handleDragEnd(boardId: string, event: DragEndEvent) {
     const draggedId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
@@ -1293,22 +1339,13 @@ export default function Home() {
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
           )}
 
-          <div className="desktop-stack">
-          {workspaceState.boards.map((project) => {
-            const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
-            return (
-              <section
-                key={project.id}
-                className="desktop-board"
-                style={{
-                  "--desktop-accent": THEME_ACCENTS[project.theme],
-                  "--desktop-surface": THEME_SURFACES[project.theme],
-                } as CSSProperties}
-              >
-                <header className="desktop-title-bar">
-                  <h1>{project.title}</h1>
-                  <button type="button" className="desktop-settings-button" aria-label={`Personalizar desktop ${project.title}`} title="Personalizar desktop" onClick={() => { activateBoard(project.id); setShowCustomizer(true); }}><SlidersHorizontal size={15} /></button>
-                </header>
+          <DndContext id="vinello-desktop-order" sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDesktopDragEnd}>
+            <SortableContext items={workspaceState.boards.map((project) => `desktop-${project.id}`)} strategy={verticalListSortingStrategy}>
+              <div className="desktop-stack">
+              {workspaceState.boards.map((project) => {
+                const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
+                return (
+                  <SortableDesktop key={project.id} project={project} onCustomize={() => { activateBoard(project.id); setShowCustomizer(true); }}>
                 <DndContext id={`vinello-board-dnd-${project.id}`} sensors={sensors} collisionDetection={closestCorners} onDragStart={(event) => handleDragStart(project.id, event)} onDragEnd={(event) => handleDragEnd(project.id, event)} onDragCancel={() => setActiveDrag(null)}>
                   <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
                     {project.columns.map((column) => {
@@ -1319,10 +1356,12 @@ export default function Home() {
                   </div>
                   <DragOverlay>{activeDrag?.boardId === project.id && activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
                 </DndContext>
-              </section>
-            );
-          })}
-          </div>
+                  </SortableDesktop>
+                );
+              })}
+              </div>
+            </SortableContext>
+          </DndContext>
         </>}
       </section>
 
