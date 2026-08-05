@@ -60,7 +60,7 @@ import {
 import { auth, db } from "../src/firebase";
 
 type Priority = "low" | "medium" | "high";
-type Theme = "peach" | "lilac" | "ocean" | "midnight";
+type Theme = "peach" | "lilac" | "ocean" | "midnight" | "rose" | "sage" | "sky" | "sand" | "paper" | "graphite";
 
 type CardItem = {
   id: string;
@@ -90,8 +90,10 @@ type BoardState = {
 };
 
 type WorkspaceState = {
+  schemaVersion: number;
   activeBoardId: string;
   boards: BoardState[];
+  plannerNotes: Record<string, string>;
 };
 
 type SaveStatus = "loading" | "saving" | "saved" | "offline";
@@ -199,22 +201,160 @@ const DEFAULT_BOARD: BoardState = {
   ],
 };
 
+const WORKSPACE_SCHEMA_VERSION = 2;
+
+const STANDARD_COLUMNS = [
+  { key: "todo", title: "A fazer", color: "#8793a3" },
+  { key: "doing", title: "Em andamento", color: "#8793a3" },
+  { key: "done", title: "Concluído", color: "#8793a3" },
+  { key: "september", title: "Setembro", color: "#8793a3" },
+  { key: "october", title: "Outubro", color: "#8793a3" },
+  { key: "november", title: "Novembro", color: "#8793a3" },
+  { key: "december", title: "Dezembro", color: "#8793a3" },
+] as const;
+
+const TRELLO_TASKS: Record<string, { todo?: string[]; doing?: string[]; done?: string[] }> = {
+  italia: {
+    todo: ["Ver roteiros", "Definir datas", "Tirar as férias", "Passagens", "Hotel", "Passeios"],
+  },
+  casa: {
+    todo: [
+      "Botar prateleira no banheiro da Vivi",
+      "Ver se dá para abrir embaixo da churrasqueira na cozinha",
+      "Forma de gelo de silicone",
+      "Vender as cadeiras",
+      "Verificar as fitas VHS/DVDs",
+      "Projetar o escritório e ver como fica a mesa",
+      "Ver o sofá novo",
+    ],
+    done: ["Finalizar aluguel do Itajaí"],
+  },
+  pessoal: {
+    todo: ["Comprar papel bolha", "Comprar cera para o piso vinílico", "Responder e-mail com pesquisa", "Vender o celular da sogra"],
+  },
+  mestrado: {
+    todo: [
+      "Marcar apresentação de andamento para o dia 20",
+      "Confirmar se consegui a cadeira de algoritmos",
+      "Início das aulas dia 5",
+      "Mandar para o comitê de ética o pedido dos dados de caso de dengue",
+    ],
+  },
+  panvel: {
+    todo: [
+      "Melhorar regra de cobertura de estoque",
+      "Fallback de densidade — itens sem previsão estão zerados",
+      "Implementar bandas de incerteza",
+      "Mapear o resto das regras de negócios",
+      "Ver se o Nicholas já tem o arquivo pronto com as regras de negócio",
+      "Investigação sobre a previsão do erro do faturamento do segundo semestre de 2026 em relação ao primeiro",
+    ],
+    doing: ["Modelagem de itens por categoria e mandar planilha para o Nicholas"],
+  },
+};
+
+const DEMO_CARD_TITLES = new Set(DEFAULT_BOARD.cards.map((card) => card.title.toLocaleLowerCase("pt-BR")));
+
+function normalizeKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function createStandardColumns(boardId: string) {
+  return STANDARD_COLUMNS.map((column) => ({
+    id: `${boardId}-${column.key}`,
+    title: column.title,
+    color: column.color,
+    cardIds: [] as string[],
+  }));
+}
+
 function createBlankBoard(id: string, title: string, theme: Theme): BoardState {
   return {
     id,
     title,
     theme,
-    columns: [
-      { id: `${id}-inbox`, title: "Caixa de entrada", color: "#f47768", cardIds: [] },
-      { id: `${id}-week`, title: "Esta semana", color: "#9b87ef", cardIds: [] },
-      { id: `${id}-doing`, title: "Em andamento", color: "#f3b94f", cardIds: [] },
-      { id: `${id}-done`, title: "Concluído", color: "#4fbea6", cardIds: [] },
-    ],
+    columns: createStandardColumns(id),
     cards: [],
   };
 }
 
-const DEFAULT_WORKSPACE: WorkspaceState = {
+function getStandardColumnKey(title: string) {
+  const normalized = normalizeKey(title);
+  if (normalized.includes("andamento")) return "doing";
+  if (normalized.includes("conclu")) return "done";
+  if (normalized.includes("setembro")) return "september";
+  if (normalized.includes("outubro")) return "october";
+  if (normalized.includes("novembro")) return "november";
+  if (normalized.includes("dezembro")) return "december";
+  return "todo";
+}
+
+function migrateBoard(board: BoardState) {
+  const shouldRemoveDemoCards = normalizeKey(board.title) === "pessoal";
+  const cards = board.cards.filter((card) => !shouldRemoveDemoCards || !DEMO_CARD_TITLES.has(card.title.toLocaleLowerCase("pt-BR")));
+  const cardById = new Map(cards.map((card) => [card.id, card]));
+  const columns = createStandardColumns(board.id);
+  const targetByKey = new Map(STANDARD_COLUMNS.map((column, index) => [column.key, columns[index]]));
+
+  board.columns.forEach((column) => {
+    const target = targetByKey.get(getStandardColumnKey(column.title)) ?? columns[0];
+    column.cardIds.forEach((cardId) => {
+      if (cardById.has(cardId) && !target.cardIds.includes(cardId)) target.cardIds.push(cardId);
+    });
+  });
+
+  cards.forEach((card) => {
+    if (!columns.some((column) => column.cardIds.includes(card.id))) columns[0].cardIds.push(card.id);
+  });
+
+  const seed = TRELLO_TASKS[normalizeKey(board.title)];
+  if (seed) {
+    const knownTitles = new Set(cards.map((card) => normalizeKey(card.title)));
+    (["todo", "doing", "done"] as const).forEach((columnKey) => {
+      seed[columnKey]?.forEach((title, index) => {
+        if (knownTitles.has(normalizeKey(title))) return;
+        const id = `${board.id}-trello-${columnKey}-${index + 1}`;
+        cards.push({
+          id,
+          title,
+          description: "",
+          label: "",
+          labelColor: LABEL_COLORS[0],
+          dueDate: "",
+          priority: "medium",
+          checklistDone: 0,
+          checklistTotal: 0,
+        });
+        targetByKey.get(columnKey)?.cardIds.push(id);
+        knownTitles.add(normalizeKey(title));
+      });
+    });
+  }
+
+  return { ...board, columns, cards };
+}
+
+function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
+  if (workspace.schemaVersion === WORKSPACE_SCHEMA_VERSION) {
+    return { ...workspace, plannerNotes: workspace.plannerNotes ?? {} };
+  }
+
+  const boards = [...workspace.boards];
+  if (!boards.some((board) => normalizeKey(board.title) === "casa")) {
+    const italyIndex = boards.findIndex((board) => normalizeKey(board.title) === "italia");
+    boards.splice(italyIndex >= 0 ? italyIndex + 1 : boards.length, 0, createBlankBoard("casa", "Casa", "sand"));
+  }
+
+  return {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    activeBoardId: boards.some((board) => board.id === workspace.activeBoardId) ? workspace.activeBoardId : boards[0].id,
+    boards: boards.map(migrateBoard),
+    plannerNotes: workspace.plannerNotes ?? {},
+  };
+}
+
+const DEFAULT_WORKSPACE = migrateWorkspace({
+  schemaVersion: 0,
   activeBoardId: DEFAULT_BOARD.id,
   boards: [
     DEFAULT_BOARD,
@@ -222,14 +362,15 @@ const DEFAULT_WORKSPACE: WorkspaceState = {
     createBlankBoard("panvel", "Panvel", "lilac"),
     createBlankBoard("mestrado", "Mestrado", "midnight"),
   ],
-};
+  plannerNotes: {},
+});
 
 function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
   if (payload?.workspace?.boards?.length) {
     const hasActiveBoard = payload.workspace.boards.some((board) => board.id === payload.workspace!.activeBoardId);
-    return hasActiveBoard
+    return migrateWorkspace(hasActiveBoard
       ? payload.workspace
-      : { ...payload.workspace, activeBoardId: payload.workspace.boards[0].id };
+      : { ...payload.workspace, activeBoardId: payload.workspace.boards[0].id });
   }
 
   if (payload?.state) {
@@ -238,34 +379,54 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       id: "pessoal",
       title: payload.state.title === "Meu espaço" ? "Pessoal" : payload.state.title,
     };
-    return {
+    return migrateWorkspace({
+      schemaVersion: 0,
       activeBoardId: legacyBoard.id,
       boards: [legacyBoard, ...DEFAULT_WORKSPACE.boards.slice(1)],
-    };
+      plannerNotes: {},
+    });
   }
 
   return DEFAULT_WORKSPACE;
 }
 
 const THEME_OPTIONS: { id: Theme; name: string; colors: string[] }[] = [
-  { id: "peach", name: "Pêssego", colors: ["#f8eee8", "#f3b5a4"] },
-  { id: "lilac", name: "Lavanda", colors: ["#efecf8", "#b9aceb"] },
-  { id: "ocean", name: "Oceano", colors: ["#e7f2f4", "#8ac6c7"] },
-  { id: "midnight", name: "Noturno", colors: ["#252739", "#9b87ef"] },
+  { id: "peach", name: "Pêssego pastel", colors: ["#f7e5dc", "#eeb9a7"] },
+  { id: "lilac", name: "Lavanda pastel", colors: ["#eee9f8", "#bcb1df"] },
+  { id: "ocean", name: "Menta pastel", colors: ["#e2f0ed", "#9bc9bd"] },
+  { id: "rose", name: "Rosa pastel", colors: ["#f5e5ea", "#dca7b8"] },
+  { id: "sage", name: "Sálvia pastel", colors: ["#e8eee5", "#aebfa7"] },
+  { id: "sky", name: "Azul pastel", colors: ["#e5edf6", "#a9bdd5"] },
+  { id: "sand", name: "Areia", colors: ["#f1ece3", "#cdbfa8"] },
+  { id: "paper", name: "Preto e branco", colors: ["#ffffff", "#bfc3c9"] },
+  { id: "graphite", name: "Grafite", colors: ["#d8dadd", "#454a52"] },
+  { id: "midnight", name: "Preto", colors: ["#17191d", "#555b65"] },
 ];
 
 const THEME_ACCENTS: Record<Theme, string> = {
-  peach: "#ef705f",
-  lilac: "#8d79e8",
-  ocean: "#38a88f",
-  midnight: "#6f7fe8",
+  peach: "#e9ad99",
+  lilac: "#afa1d8",
+  ocean: "#8abfae",
+  midnight: "#1d2025",
+  rose: "#d9a1b3",
+  sage: "#a8bda0",
+  sky: "#9db5d0",
+  sand: "#c7b79d",
+  paper: "#f4f5f7",
+  graphite: "#6d747e",
 };
 
 const THEME_SURFACES: Record<Theme, string> = {
-  peach: "rgba(249, 235, 227, 0.5)",
-  lilac: "rgba(237, 233, 248, 0.52)",
-  ocean: "rgba(229, 242, 240, 0.52)",
-  midnight: "rgba(230, 229, 240, 0.5)",
+  peach: "rgba(247, 215, 202, 0.32)",
+  lilac: "rgba(214, 205, 239, 0.32)",
+  ocean: "rgba(197, 229, 220, 0.3)",
+  midnight: "rgba(0, 0, 0, 0.32)",
+  rose: "rgba(238, 205, 216, 0.3)",
+  sage: "rgba(211, 226, 205, 0.3)",
+  sky: "rgba(204, 220, 238, 0.3)",
+  sand: "rgba(232, 220, 200, 0.3)",
+  paper: "rgba(255, 255, 255, 0.2)",
+  graphite: "rgba(28, 31, 36, 0.24)",
 };
 
 function makeId(prefix: string) {
@@ -626,7 +787,7 @@ function ProjectModal({
             <span>Nome do desktop</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Casa, Viagem ou Trabalho" required />
           </label>
-          <p className="project-editor-note">O novo desktop começa com quatro colunas vazias e fica totalmente separado dos outros.</p>
+          <p className="project-editor-note">O novo desktop começa com as sete listas padrão e fica totalmente separado dos outros.</p>
           <div className="modal-actions">
             <span className="modal-spacer" />
             <button type="button" className="text-button" onClick={onClose}>Cancelar</button>
@@ -638,6 +799,132 @@ function ProjectModal({
   );
 }
 
+type PlanningMode = "week" | "month" | "year";
+
+const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function startOfWeek(date: Date) {
+  const day = date.getDay();
+  return addDays(date, -(day === 0 ? 6 : day - 1));
+}
+
+function monthCells(date: Date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const offset = (firstDay.getDay() + 6) % 7;
+  const days = new Date(year, month + 1, 0).getDate();
+  const trailing = (7 - ((offset + days) % 7)) % 7;
+  return [
+    ...Array.from({ length: offset }, () => null),
+    ...Array.from({ length: days }, (_, index) => new Date(year, month, index + 1)),
+    ...Array.from({ length: trailing }, () => null),
+  ];
+}
+
+function PlanningWorkspace({
+  mode,
+  cursor,
+  notes,
+  onChangeMode,
+  onChangeCursor,
+  onChangeNote,
+}: {
+  mode: PlanningMode;
+  cursor: Date;
+  notes: Record<string, string>;
+  onChangeMode: (mode: PlanningMode) => void;
+  onChangeCursor: (date: Date) => void;
+  onChangeNote: (key: string, value: string) => void;
+}) {
+  const weekStart = startOfWeek(cursor);
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const monthTitle = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(cursor);
+  const shiftCursor = (direction: -1 | 1) => {
+    if (mode === "week") onChangeCursor(addDays(cursor, direction * 7));
+    if (mode === "month") onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1));
+    if (mode === "year") onChangeCursor(new Date(cursor.getFullYear() + direction, cursor.getMonth(), 1));
+  };
+
+  return (
+    <section className="planning-workspace">
+      <nav className="planning-subnav" aria-label="Visualização do planejamento">
+        {(["week", "month", "year"] as PlanningMode[]).map((item) => (
+          <button key={item} type="button" className={mode === item ? "active" : ""} onClick={() => onChangeMode(item)}>
+            {item === "week" ? "Semana" : item === "month" ? "Mensal" : "Anual"}
+          </button>
+        ))}
+      </nav>
+
+      <header className="planner-header">
+        <div><span>Planejamento</span><h1>{mode === "year" ? cursor.getFullYear() : monthTitle}</h1></div>
+        <div className="planner-navigation">
+          <button type="button" aria-label="Período anterior" onClick={() => shiftCursor(-1)}><ArrowLeft size={17} /></button>
+          <button type="button" onClick={() => onChangeCursor(new Date())}>Hoje</button>
+          <button type="button" aria-label="Próximo período" onClick={() => shiftCursor(1)}><ArrowRight size={17} /></button>
+        </div>
+      </header>
+
+      {mode === "week" && (
+        <div className="week-planner">
+          {weekDays.map((date, index) => {
+            const key = dateKey(date);
+            return (
+              <article key={key} className="week-day">
+                <header><strong>{WEEKDAYS[index]}</strong><span>{String(date.getDate()).padStart(2, "0")}</span></header>
+                <textarea value={notes[key] ?? ""} onChange={(event) => onChangeNote(key, event.target.value)} placeholder="Planejar o dia…" aria-label={`Planejamento de ${key}`} />
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {mode === "month" && (
+        <div className="month-planner">
+          <div className="month-weekdays">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
+          <div className="month-grid">
+            {monthCells(cursor).map((date, index) => date ? (
+              <article key={dateKey(date)} className="month-day">
+                <strong>{date.getDate()}</strong>
+                <textarea value={notes[dateKey(date)] ?? ""} onChange={(event) => onChangeNote(dateKey(date), event.target.value)} placeholder="Adicionar…" aria-label={`Planejamento de ${dateKey(date)}`} />
+              </article>
+            ) : <span key={`empty-${index}`} className="month-day month-day-empty" />)}
+          </div>
+        </div>
+      )}
+
+      {mode === "year" && (
+        <div className="year-planner">
+          {Array.from({ length: 12 }, (_, month) => {
+            const monthDate = new Date(cursor.getFullYear(), month, 1);
+            const daysWithNotes = monthCells(monthDate).filter((date): date is Date => Boolean(date && notes[dateKey(date)]?.trim())).length;
+            return (
+              <button key={month} type="button" onClick={() => { onChangeCursor(monthDate); onChangeMode("month"); }}>
+                <span>{new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(monthDate)}</span>
+                <strong>{daysWithNotes}</strong>
+                <small>{daysWithNotes === 1 ? "dia planejado" : "dias planejados"}</small>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Home() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(DEFAULT_WORKSPACE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
@@ -646,6 +933,9 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [activeView, setActiveView] = useState<"board" | "planning">("board");
+  const [planningMode, setPlanningMode] = useState<PlanningMode>("week");
+  const [plannerCursor, setPlannerCursor] = useState(() => new Date());
   const [query, setQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
   const [activeDrag, setActiveDrag] = useState<{ boardId: string; cardId: string } | null>(null);
@@ -668,6 +958,13 @@ export default function Home() {
 
   function activateBoard(boardId: string) {
     setWorkspaceState((current) => ({ ...current, activeBoardId: boardId }));
+  }
+
+  function setPlannerNote(key: string, value: string) {
+    setWorkspaceState((current) => ({
+      ...current,
+      plannerNotes: { ...current.plannerNotes, [key]: value },
+    }));
   }
 
   const sensors = useSensors(
@@ -744,8 +1041,9 @@ export default function Home() {
 
   function createProject(title: string) {
     const projectId = makeId("project");
-    const themes: Theme[] = ["peach", "ocean", "lilac", "midnight"];
+    const themes: Theme[] = ["peach", "ocean", "lilac", "sage", "sky", "sand", "rose", "paper", "graphite", "midnight"];
     setWorkspaceState((current) => ({
+      ...current,
       activeBoardId: projectId,
       boards: [
         ...current.boards,
@@ -762,7 +1060,7 @@ export default function Home() {
     if (!window.confirm(`Excluir o desktop “${board.title}” e todos os cartões dele?`)) return;
     setWorkspaceState((current) => {
       const remaining = current.boards.filter((candidate) => candidate.id !== current.activeBoardId);
-      return { activeBoardId: remaining[0].id, boards: remaining };
+      return { ...current, activeBoardId: remaining[0].id, boards: remaining };
     });
     setShowCustomizer(false);
     setQuery("");
@@ -967,17 +1265,15 @@ export default function Home() {
         <header className="topbar">
           <div className="topbar-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>vinello</strong></div>
           <nav className="top-nav" aria-label="Navegação principal">
-            <button type="button" className={`top-nav-item ${priorityFilter === "all" ? "active" : ""}`} onClick={() => { setQuery(""); setPriorityFilter("all"); }}><LayoutDashboard size={17} /><span>Quadro</span></button>
-            <button type="button" className="top-nav-item" onClick={() => { setQuery(""); setPriorityFilter("all"); }}><CalendarDays size={17} /><span>Planejamento</span></button>
-            <button type="button" className={`top-nav-item ${priorityFilter === "high" ? "active" : ""}`} onClick={() => setPriorityFilter("high")}><Sparkles size={17} /><span>Foco</span><em>{highPriorityCount}</em></button>
+            <button type="button" className={`top-nav-item ${activeView === "board" && priorityFilter === "all" ? "active" : ""}`} onClick={() => { setActiveView("board"); setQuery(""); setPriorityFilter("all"); }}><LayoutDashboard size={17} /><span>Quadro</span></button>
+            <button type="button" className={`top-nav-item ${activeView === "planning" ? "active" : ""}`} onClick={() => { setActiveView("planning"); setQuery(""); setPriorityFilter("all"); }}><CalendarDays size={17} /><span>Planejamento</span></button>
+            <button type="button" className={`top-nav-item ${activeView === "board" && priorityFilter === "high" ? "active" : ""}`} onClick={() => { setActiveView("board"); setPriorityFilter("high"); }}><Sparkles size={17} /><span>Foco</span><em>{highPriorityCount}</em></button>
           </nav>
-          <button type="button" className="add-desktop-button" aria-label="Adicionar desktop" title="Adicionar desktop" onClick={() => setShowProjectModal(true)}><Plus size={18} /></button>
-          <div className="search-wrap">
-            <Search size={18} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" />
-            <kbd>⌘ K</kbd>
-          </div>
-          <div className="top-actions">
+          {activeView === "board" && <button type="button" className="add-desktop-button" aria-label="Adicionar desktop" title="Adicionar desktop" onClick={() => setShowProjectModal(true)}><Plus size={18} /></button>}
+          {activeView === "board" && <div className="search-wrap">
+            <Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" /><kbd>⌘ K</kbd>
+          </div>}
+          <div className={`top-actions ${activeView === "planning" ? "push-right" : ""}`}>
             <div className={`save-status status-${saveStatus}`} title={saveStatus === "offline" ? "Alterações ainda não sincronizadas" : "Sincronização do quadro"}>
               {saveStatus === "saving" && <LoaderCircle size={16} className="spin" />}
               {saveStatus === "saved" && <Cloud size={16} />}
@@ -990,11 +1286,14 @@ export default function Home() {
           </div>
         </header>
 
-        {(query || priorityFilter !== "all") && (
-          <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
-        )}
+        {activeView === "planning" ? (
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} />
+        ) : <>
+          {(query || priorityFilter !== "all") && (
+            <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
+          )}
 
-        <div className="desktop-stack">
+          <div className="desktop-stack">
           {workspaceState.boards.map((project) => {
             const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
             return (
@@ -1016,14 +1315,15 @@ export default function Home() {
                       const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
                       return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
                     })}
-                    <button type="button" className="add-column-button" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><span><Plus size={19} /></span><strong>Adicionar outra lista</strong><small>Crie uma nova etapa</small></button>
+                    <button type="button" className="add-column-button" aria-label={`Adicionar lista ao desktop ${project.title}`} title="Adicionar outra lista" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><Plus size={18} /></button>
                   </div>
                   <DragOverlay>{activeDrag?.boardId === project.id && activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
                 </DndContext>
               </section>
             );
           })}
-        </div>
+          </div>
+        </>}
       </section>
 
       {showProjectModal && (
@@ -1062,7 +1362,7 @@ export default function Home() {
             <label className="field full-field"><span>Nome do desktop</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
             <div className="theme-section"><span>Tema do fundo</span><div className="theme-grid">{THEME_OPTIONS.map((theme) => (
               <button key={theme.id} type="button" className={`theme-option ${board.theme === theme.id ? "selected" : ""}`} onClick={() => setBoard((current) => ({ ...current, theme: theme.id }))}>
-                <span className="theme-preview" style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})` }}>{board.theme === theme.id && <Check size={18} />}</span><strong>{theme.name}</strong>
+                <span className="theme-preview" style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})`, color: theme.id === "paper" ? "#25282d" : "#fff" }}>{board.theme === theme.id && <Check size={18} />}</span><strong>{theme.name}</strong>
               </button>
             ))}</div></div>
             <div className="customizer-tip"><Sparkles size={20} /><div><strong>Dica de organização</strong><p>Clique nos três pontos de cada coluna para trocar seu nome e sua cor.</p></div></div>
