@@ -117,6 +117,7 @@ type WorkspaceState = {
   schemaVersion: number;
   activeBoardId: string;
   boards: BoardState[];
+  visibleBoardIds: string[];
   plannerNotes: Record<string, string>;
   plannerSlotColors: Record<string, string>;
 };
@@ -231,6 +232,7 @@ const WORKSPACE_SCHEMA_VERSION = 3;
 const STANDARD_COLUMNS = [
   { key: "todo", title: "A fazer", color: "#f8dddd" },
   { key: "doing", title: "Fazendo", color: "#dce8f4" },
+  { key: "review", title: "Congelado em revisão", color: "#eee8f3" },
   { key: "done", title: "Feito", color: "#dcecdf" },
   { key: "september", title: "Setembro", color: "#e8eaed" },
   { key: "october", title: "Outubro", color: "#e8eaed" },
@@ -306,12 +308,27 @@ function createBlankBoard(id: string, title: string, theme: Theme): BoardState {
 function getStandardColumnKey(title: string) {
   const normalized = normalizeKey(title);
   if (normalized.includes("andamento") || normalized === "fazendo") return "doing";
+  if (normalized.includes("congelado") || normalized.includes("revisao")) return "review";
   if (normalized.includes("conclu") || normalized === "feito") return "done";
   if (normalized.includes("setembro")) return "september";
   if (normalized.includes("outubro")) return "october";
   if (normalized.includes("novembro")) return "november";
   if (normalized.includes("dezembro")) return "december";
   return "todo";
+}
+
+function ensureReviewColumn(board: BoardState) {
+  if (board.columns.some((column) => getStandardColumnKey(column.title) === "review")) return board;
+  const review = STANDARD_COLUMNS.find((column) => column.key === "review")!;
+  const columns = [...board.columns];
+  const doneIndex = columns.findIndex((column) => getStandardColumnKey(column.title) === "done");
+  columns.splice(doneIndex >= 0 ? doneIndex : Math.min(2, columns.length), 0, {
+    id: `${board.id}-review`,
+    title: review.title,
+    color: review.color,
+    cardIds: [],
+  });
+  return { ...board, columns };
 }
 
 function migrateBoard(board: BoardState) {
@@ -361,8 +378,13 @@ function migrateBoard(board: BoardState) {
 
 function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
   if (workspace.schemaVersion === WORKSPACE_SCHEMA_VERSION) {
+    const boards = workspace.boards.map(ensureReviewColumn);
     return {
       ...workspace,
+      boards,
+      visibleBoardIds: Array.isArray(workspace.visibleBoardIds)
+        ? workspace.visibleBoardIds.filter((id) => boards.some((board) => board.id === id))
+        : boards.map((board) => board.id),
       plannerNotes: workspace.plannerNotes ?? {},
       plannerSlotColors: workspace.plannerSlotColors ?? {},
     };
@@ -374,10 +396,12 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     boards.splice(italyIndex >= 0 ? italyIndex + 1 : boards.length, 0, createBlankBoard("casa", "Casa", "sand"));
   }
 
+  const migratedBoards = boards.map(migrateBoard);
   return {
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
     activeBoardId: boards.some((board) => board.id === workspace.activeBoardId) ? workspace.activeBoardId : boards[0].id,
-    boards: boards.map(migrateBoard),
+    boards: migratedBoards,
+    visibleBoardIds: migratedBoards.map((board) => board.id),
     plannerNotes: workspace.plannerNotes ?? {},
     plannerSlotColors: workspace.plannerSlotColors ?? {},
   };
@@ -392,6 +416,7 @@ const DEFAULT_WORKSPACE = migrateWorkspace({
     createBlankBoard("panvel", "Panvel", "lilac"),
     createBlankBoard("mestrado", "Mestrado", "midnight"),
   ],
+  visibleBoardIds: [],
   plannerNotes: {},
   plannerSlotColors: {},
 });
@@ -414,6 +439,7 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       schemaVersion: 0,
       activeBoardId: legacyBoard.id,
       boards: [legacyBoard, ...DEFAULT_WORKSPACE.boards.slice(1)],
+      visibleBoardIds: [],
       plannerNotes: {},
       plannerSlotColors: {},
     });
@@ -1036,10 +1062,12 @@ function WeeklySlot({
   slotKey,
   value,
   color,
+  selected,
   isFullHour,
   inputRef,
   onChange,
   onChangeColor,
+  onToggleSelected,
   onPaste,
   onCopy,
   onKeyDown,
@@ -1048,10 +1076,12 @@ function WeeklySlot({
   slotKey: string;
   value: string;
   color: string;
+  selected: boolean;
   isFullHour: boolean;
   inputRef: (node: HTMLInputElement | null) => void;
   onChange: (value: string) => void;
   onChangeColor: (color: string) => void;
+  onToggleSelected: () => void;
   onPaste: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onCopy: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
@@ -1073,7 +1103,7 @@ function WeeklySlot({
 
   return (
     <div ref={setDroppableRef} className={`week-slot ${isFullHour ? "is-full-hour" : ""} ${isOver ? "is-over" : ""}`} role="gridcell">
-      <div ref={setDraggableRef} className={`week-slot-card ${value ? "has-value" : ""} ${isDragging ? "is-dragging" : ""}`} style={cardStyle}>
+      <div ref={setDraggableRef} className={`week-slot-card ${value ? "has-value" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""}`} style={cardStyle}>
         <input
           ref={inputRef}
           value={value}
@@ -1086,6 +1116,7 @@ function WeeklySlot({
         />
         {value && (
           <div className="week-card-tools">
+            <button type="button" className={`week-card-select ${selected ? "is-selected" : ""}`} aria-label={selected ? "Remover da seleção" : "Adicionar à seleção"} aria-pressed={selected} title="Selecionar compromisso" onPointerDown={(event) => event.stopPropagation()} onClick={onToggleSelected}>{selected && <Check size={11} />}</button>
             <button type="button" className="week-card-drag" aria-label="Arrastar compromisso" title="Arrastar para outro horário" {...attributes} {...listeners}><GripVertical size={13} /></button>
             <label className="week-card-color" title="Cor do compromisso" onPointerDown={(event) => event.stopPropagation()}>
               <span style={{ background: color }} />
@@ -1103,17 +1134,20 @@ function WeeklyPlannerGrid({
   notes,
   colors,
   onChangeNote,
-  onChangeColor,
+  onChangeColors,
   onMoveSlot,
+  onMoveSlots,
 }: {
   days: Date[];
   notes: Record<string, string>;
   colors: Record<string, string>;
   onChangeNote: (key: string, value: string) => void;
-  onChangeColor: (key: string, color: string) => void;
+  onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
+  onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
 }) {
   const cellRefs = useRef(new Map<string, HTMLInputElement>());
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const today = dateKey(new Date());
   const scheduleSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1164,11 +1198,47 @@ function WeeklyPlannerGrid({
   function handleScheduleDragEnd(event: DragEndEvent) {
     const sourceKey = event.active.data.current?.slotKey as string | undefined;
     const targetKey = event.over?.data.current?.slotKey as string | undefined;
-    if (sourceKey && targetKey && sourceKey !== targetKey) onMoveSlot(sourceKey, targetKey);
+    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+    const movingKeys = selectedKeys.has(sourceKey) && selectedKeys.size > 1 ? [...selectedKeys] : [sourceKey];
+    if (movingKeys.length === 1) {
+      onMoveSlot(sourceKey, targetKey);
+      if (selectedKeys.has(sourceKey)) setSelectedKeys(new Set([targetKey]));
+      return;
+    }
+
+    const positions = new Map<string, { row: number; column: number }>();
+    WEEK_TIME_SLOTS.forEach((time, row) => days.forEach((date, column) => positions.set(weekSlotKey(date, time), { row, column })));
+    const sourcePosition = positions.get(sourceKey);
+    const targetPosition = positions.get(targetKey);
+    if (!sourcePosition || !targetPosition) return;
+    const rowOffset = targetPosition.row - sourcePosition.row;
+    const columnOffset = targetPosition.column - sourcePosition.column;
+    const moves = movingKeys.map((key) => {
+      const position = positions.get(key);
+      if (!position) return null;
+      const row = position.row + rowOffset;
+      const column = position.column + columnOffset;
+      if (row < 0 || row >= WEEK_TIME_SLOTS.length || column < 0 || column >= days.length) return null;
+      return { sourceKey: key, targetKey: weekSlotKey(days[column], WEEK_TIME_SLOTS[row]) };
+    });
+    if (moves.some((move) => !move)) return;
+    const validMoves = moves.filter((move): move is { sourceKey: string; targetKey: string } => Boolean(move));
+    const sources = new Set(validMoves.map((move) => move.sourceKey));
+    if (validMoves.some((move) => Boolean(notes[move.targetKey]) && !sources.has(move.targetKey))) return;
+    onMoveSlots(validMoves);
+    setSelectedKeys(new Set(validMoves.map((move) => move.targetKey)));
   }
 
   return (
     <div className="week-planner">
+      {selectedKeys.size > 0 && (
+        <div className="week-bulk-actions">
+          <strong>{selectedKeys.size} {selectedKeys.size === 1 ? "card selecionado" : "cards selecionados"}</strong>
+          <span>Arraste um deles para mover o grupo para horários livres</span>
+          <label>Cor do grupo<input type="color" defaultValue="#dce8f4" onChange={(event) => onChangeColors([...selectedKeys], event.target.value)} /></label>
+          <button type="button" onClick={() => setSelectedKeys(new Set())}>Limpar seleção</button>
+        </div>
+      )}
       <DndContext sensors={scheduleSensors} collisionDetection={closestCorners} onDragEnd={handleScheduleDragEnd}>
         <div className="week-schedule-scroll">
           <div className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
@@ -1194,10 +1264,15 @@ function WeeklyPlannerGrid({
                       slotKey={key}
                       value={value}
                       color={colors[key] ?? "#ffffff"}
+                      selected={selectedKeys.has(key)}
                       isFullHour={isFullHour}
                       inputRef={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
-                      onChange={(nextValue) => onChangeNote(key, nextValue)}
-                      onChangeColor={(nextColor) => onChangeColor(key, nextColor)}
+                      onChange={(nextValue) => {
+                        onChangeNote(key, nextValue);
+                        if (!nextValue) setSelectedKeys((current) => { const next = new Set(current); next.delete(key); return next; });
+                      }}
+                      onChangeColor={(nextColor) => onChangeColors(selectedKeys.has(key) ? [...selectedKeys] : [key], nextColor)}
+                      onToggleSelected={() => setSelectedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
                       onPaste={(event) => handlePaste(event, row, column)}
                       onCopy={(event) => handleCopy(event, value)}
                       onKeyDown={(event) => handleCellKeyDown(event, row, column)}
@@ -1224,8 +1299,9 @@ function PlanningWorkspace({
   onChangeMode,
   onChangeCursor,
   onChangeNote,
-  onChangeColor,
+  onChangeColors,
   onMoveSlot,
+  onMoveSlots,
 }: {
   mode: PlanningMode;
   cursor: Date;
@@ -1234,8 +1310,9 @@ function PlanningWorkspace({
   onChangeMode: (mode: PlanningMode) => void;
   onChangeCursor: (date: Date) => void;
   onChangeNote: (key: string, value: string) => void;
-  onChangeColor: (key: string, color: string) => void;
+  onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
+  onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
 }) {
   const weekStart = startOfWeek(cursor);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -1266,7 +1343,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <WeeklyPlannerGrid days={weekDays} notes={notes} colors={colors} onChangeNote={onChangeNote} onChangeColor={onChangeColor} onMoveSlot={onMoveSlot} />
+        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} />
       )}
 
       {mode === "month" && (
@@ -1320,6 +1397,7 @@ export default function Home() {
   const [columnModal, setColumnModal] = useState<{ boardId: string; mode: "new" | "edit"; columnId?: string } | null>(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
+  const [showDesktopFilter, setShowDesktopFilter] = useState(false);
   const saveRequest = useRef(0);
   const board = workspaceState.boards.find((candidate) => candidate.id === workspaceState.activeBoardId)
     ?? workspaceState.boards[0];
@@ -1344,10 +1422,10 @@ export default function Home() {
     }));
   }
 
-  function setPlannerSlotColor(key: string, color: string) {
+  function setPlannerSlotColors(keys: string[], color: string) {
     setWorkspaceState((current) => ({
       ...current,
-      plannerSlotColors: { ...current.plannerSlotColors, [key]: color },
+      plannerSlotColors: keys.reduce((next, key) => ({ ...next, [key]: color }), current.plannerSlotColors),
     }));
   }
 
@@ -1371,6 +1449,23 @@ export default function Home() {
           [targetKey]: sourceColor,
         },
       };
+    });
+  }
+
+  function movePlannerSlots(moves: { sourceKey: string; targetKey: string }[]) {
+    setWorkspaceState((current) => {
+      const sources = new Set(moves.map((move) => move.sourceKey));
+      if (moves.some((move) => Boolean(current.plannerNotes[move.targetKey]) && !sources.has(move.targetKey))) return current;
+      const moving = moves.map((move) => ({
+        ...move,
+        value: current.plannerNotes[move.sourceKey] ?? "",
+        color: current.plannerSlotColors[move.sourceKey] ?? "#ffffff",
+      }));
+      const plannerNotes = { ...current.plannerNotes };
+      const plannerSlotColors = { ...current.plannerSlotColors };
+      moving.forEach(({ sourceKey }) => { plannerNotes[sourceKey] = ""; plannerSlotColors[sourceKey] = "#ffffff"; });
+      moving.forEach(({ targetKey, value, color }) => { plannerNotes[targetKey] = value; plannerSlotColors[targetKey] = color; });
+      return { ...current, plannerNotes, plannerSlotColors };
     });
   }
 
@@ -1456,6 +1551,7 @@ export default function Home() {
         ...current.boards,
         createBlankBoard(projectId, title, themes[current.boards.length % themes.length]),
       ],
+      visibleBoardIds: [...current.visibleBoardIds, projectId],
     }));
     setShowProjectModal(false);
     setQuery("");
@@ -1467,16 +1563,30 @@ export default function Home() {
     if (!window.confirm(`Excluir o desktop “${board.title}” e todos os cartões dele?`)) return;
     setWorkspaceState((current) => {
       const remaining = current.boards.filter((candidate) => candidate.id !== current.activeBoardId);
-      return { ...current, activeBoardId: remaining[0].id, boards: remaining };
+      return { ...current, activeBoardId: remaining[0].id, boards: remaining, visibleBoardIds: current.visibleBoardIds.filter((id) => id !== current.activeBoardId) };
     });
     setShowCustomizer(false);
     setQuery("");
     setPriorityFilter("all");
   }
 
+  function toggleDesktopVisibility(boardId: string) {
+    setWorkspaceState((current) => ({
+      ...current,
+      visibleBoardIds: current.visibleBoardIds.includes(boardId)
+        ? current.visibleBoardIds.filter((id) => id !== boardId)
+        : [...current.visibleBoardIds, boardId],
+    }));
+  }
+
+  const visibleBoards = useMemo(
+    () => workspaceState.boards.filter((project) => workspaceState.visibleBoardIds.includes(project.id)),
+    [workspaceState.boards, workspaceState.visibleBoardIds],
+  );
+
   const visibleIdsByBoard = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
-    return new Map(workspaceState.boards.map((project) => {
+    return new Map(visibleBoards.map((project) => {
       const ids = project.cards.filter((card) => {
         const matchesQuery = !normalizedQuery || `${card.title} ${card.description} ${card.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery);
         const matchesPriority = priorityFilter === "all" || card.priority === priorityFilter;
@@ -1484,7 +1594,7 @@ export default function Home() {
       }).map((card) => card.id);
       return [project.id, new Set(ids)];
     }));
-  }, [priorityFilter, query, workspaceState.boards]);
+  }, [priorityFilter, query, visibleBoards]);
 
   const filteredCardCount = useMemo(
     () => [...visibleIdsByBoard.values()].reduce((total, ids) => total + ids.size, 0),
@@ -1677,6 +1787,24 @@ export default function Home() {
             <button type="button" className={`top-nav-item ${activeView === "board" && priorityFilter === "high" ? "active" : ""}`} onClick={() => { setActiveView("board"); setPriorityFilter("high"); }}><Sparkles size={17} /><span>Foco</span><em>{highPriorityCount}</em></button>
           </nav>
           {activeView === "board" && <button type="button" className="add-desktop-button" aria-label="Adicionar desktop" title="Adicionar desktop" onClick={() => setShowProjectModal(true)}><Plus size={18} /></button>}
+          {activeView === "board" && (
+            <div className="desktop-filter-control">
+              <button type="button" className={`desktop-filter-button ${showDesktopFilter ? "active" : ""}`} aria-expanded={showDesktopFilter} onClick={() => setShowDesktopFilter((current) => !current)}><Columns3 size={16} /><span>Desktops</span><em>{workspaceState.visibleBoardIds.length}/{workspaceState.boards.length}</em></button>
+              {showDesktopFilter && <>
+                <button type="button" className="desktop-filter-dismiss" aria-label="Fechar filtro de desktops" onClick={() => setShowDesktopFilter(false)} />
+                <div className="desktop-filter-popover" role="dialog" aria-label="Escolher desktops visíveis">
+                  <div className="desktop-filter-heading"><strong>Desktops visíveis</strong><small>A seleção fica salva</small></div>
+                  <div className="desktop-filter-actions"><button type="button" onClick={() => setWorkspaceState((current) => ({ ...current, visibleBoardIds: current.boards.map((project) => project.id) }))}>Todos</button><button type="button" onClick={() => setWorkspaceState((current) => ({ ...current, visibleBoardIds: [] }))}>Nenhum</button></div>
+                  <div className="desktop-filter-list">
+                    {workspaceState.boards.map((project) => {
+                      const checked = workspaceState.visibleBoardIds.includes(project.id);
+                      return <button key={project.id} type="button" className={checked ? "selected" : ""} aria-pressed={checked} onClick={() => toggleDesktopVisibility(project.id)}><i style={{ background: THEME_ACCENTS[project.theme] }} /><span>{project.title}</span><b>{checked && <Check size={13} />}</b></button>;
+                    })}
+                  </div>
+                </div>
+              </>}
+            </div>
+          )}
           {activeView === "board" && <div className="search-wrap">
             <Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" /><kbd>⌘ K</kbd>
           </div>}
@@ -1694,16 +1822,16 @@ export default function Home() {
         </header>
 
         {activeView === "planning" ? (
-          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColor={setPlannerSlotColor} onMoveSlot={movePlannerSlot} />
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} />
         ) : <>
           {(query || priorityFilter !== "all") && (
-            <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
+            <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} nos desktops visíveis</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
           )}
 
           <DndContext id="vinello-desktop-order" sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDesktopDragEnd}>
-            <SortableContext items={workspaceState.boards.map((project) => `desktop-${project.id}`)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={visibleBoards.map((project) => `desktop-${project.id}`)} strategy={verticalListSortingStrategy}>
               <div className="desktop-stack">
-              {workspaceState.boards.map((project) => {
+              {visibleBoards.map((project) => {
                 const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
                 return (
                   <SortableDesktop key={project.id} project={project} onCustomize={() => { activateBoard(project.id); setShowCustomizer(true); }}>
@@ -1720,6 +1848,7 @@ export default function Home() {
                   </SortableDesktop>
                 );
               })}
+              {visibleBoards.length === 0 && <div className="no-visible-desktops"><Columns3 size={25} /><strong>Nenhum desktop visível</strong><p>Use o filtro “Desktops” no menu superior para escolher o que aparece nesta tela.</p><button type="button" onClick={() => setWorkspaceState((current) => ({ ...current, visibleBoardIds: current.boards.map((project) => project.id) }))}>Mostrar todos</button></div>}
               </div>
             </SortableContext>
           </DndContext>
