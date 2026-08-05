@@ -830,7 +830,7 @@ export default function Home() {
           <div className="filter-summary"><span>{filteredCards.length} {filteredCards.length === 1 ? "cartão encontrado" : "cartões encontrados"}</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
         )}
 
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
+        <DndContext id="vinello-board-dnd" sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
           <div className="board-scroll" aria-label="Quadro Kanban">
             {board.columns.map((column) => {
               const cards = column.cardIds.map((id) => board.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
