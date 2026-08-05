@@ -1053,7 +1053,10 @@ select:focus-visible {
   touch-action: manipulation;
   user-select: none;
   transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  position: relative;
 }
+
+.task-card.has-description { padding-bottom: 23px; }
 
 .task-card:hover {
   transform: none;
@@ -1114,6 +1117,18 @@ select:focus-visible {
 }
 
 .task-card > h3:first-child { margin-top: 0; }
+
+.card-description-indicator {
+  width: 15px;
+  height: 15px;
+  position: absolute;
+  left: 9px;
+  bottom: 5px;
+  display: grid;
+  place-items: center;
+  color: #69717b;
+  pointer-events: none;
+}
 
 .card-inline-title {
   min-width: 0;
@@ -1677,6 +1692,7 @@ select:focus-visible {
 
 .rich-editor-toolbar button:hover,
 .rich-color-tool:hover { color: #222831; background: #e4e7ea; }
+.rich-editor-toolbar button.is-active { color: #fff; background: #566f8d; }
 .rich-editor-toolbar select { height: 30px; padding: 0 22px 0 7px; border: 1px solid #d8dce0; border-radius: 5px; color: #454b53; background: #fff; font-size: 10px; }
 .toolbar-divider { width: 1px; height: 20px; margin: 0 3px; background: #d6d9dd; }
 .rich-color-tool { position: relative; font-size: 13px; font-weight: 750; overflow: hidden; }
@@ -1693,6 +1709,8 @@ select:focus-visible {
   line-height: 1.6;
 }
 
+.rich-description-editor.is-format-painting { cursor: crosshair; }
+
 .rich-description-editor:empty::before { content: attr(data-placeholder); color: #aaa7a1; pointer-events: none; }
 .rich-description-editor h2 { margin: 12px 0 6px; font-size: 20px; }
 .rich-description-editor p { margin: 0 0 8px; }
@@ -1703,9 +1721,9 @@ select:focus-visible {
 .rich-check-item input { width: 15px; height: 15px; accent-color: #55779f; }
 
 .activity-journal { padding-top: 2px; }
-.activity-composer { padding: 10px; border: 1px solid rgba(46, 43, 48, 0.13); border-radius: 9px; background: #fff; }
-.activity-composer textarea { width: 100%; min-height: 72px; padding: 0; border: 0; outline: 0; resize: vertical; color: #303238; background: transparent; font-size: 12px; line-height: 1.5; }
-.activity-composer .primary-button { min-height: 32px; margin: 6px 0 0 auto; display: flex; font-size: 10px; }
+.activity-composer { padding: 7px 8px; border: 1px solid rgba(46, 43, 48, 0.13); border-radius: 9px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; background: #fff; }
+.activity-composer textarea { width: 100%; min-height: 38px; max-height: 72px; padding: 2px 0; border: 0; outline: 0; resize: none; color: #303238; background: transparent; font-size: 12px; line-height: 1.45; }
+.activity-composer .primary-button { min-height: 30px; margin: 0; display: flex; align-self: end; font-size: 10px; white-space: nowrap; }
 .activity-composer .primary-button:disabled { opacity: 0.42; cursor: not-allowed; }
 .activity-list { margin-top: 10px; display: grid; gap: 7px; }
 .activity-list article { padding: 10px 11px; border: 1px solid rgba(46, 43, 48, 0.1); border-radius: 8px; background: rgba(255, 255, 255, 0.78); }

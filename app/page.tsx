@@ -43,6 +43,7 @@ import {
   Cloud,
   CloudOff,
   Columns3,
+  FileText,
   GripVertical,
   Highlighter,
   Italic,
@@ -53,6 +54,7 @@ import {
   ListChecks,
   ListOrdered,
   MoreHorizontal,
+  Paintbrush,
   Pencil,
   Plus,
   Search,
@@ -505,6 +507,13 @@ function findColumnForCard(board: BoardState, cardId: string) {
   return board.columns.find((column) => column.cardIds.includes(cardId));
 }
 
+function hasCardDescription(description: string) {
+  return description
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .trim().length > 0;
+}
+
 function SortableCard({
   card,
   onOpen,
@@ -521,6 +530,7 @@ function SortableCard({
     useSortable({ id: card.id, data: { type: "card" }, disabled: editing });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const pointerMoved = useRef(false);
+  const hasDescription = hasCardDescription(card.description);
 
   useEffect(() => {
     if (editing) {
@@ -545,7 +555,7 @@ function SortableCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-card ${isDragging ? "is-dragging" : ""}`}
+      className={`task-card ${hasDescription ? "has-description" : ""} ${isDragging ? "is-dragging" : ""}`}
       {...attributes}
       {...listeners}
       role="button"
@@ -594,6 +604,11 @@ function SortableCard({
           aria-label="Editar título do cartão"
         />
       ) : <h3>{card.title}</h3>}
+      {hasDescription && (
+        <span className="card-description-indicator" title="Este cartão possui descrição" aria-label="Possui descrição">
+          <FileText size={12} />
+        </span>
+      )}
       <button
         type="button"
         className="card-detail-button"
@@ -610,9 +625,11 @@ function SortableCard({
 }
 
 function CardGhost({ card }: { card: CardItem }) {
+  const hasDescription = hasCardDescription(card.description);
   return (
-    <article className="task-card card-ghost">
+    <article className={`task-card card-ghost ${hasDescription ? "has-description" : ""}`}>
       <h3>{card.title}</h3>
+      {hasDescription && <span className="card-description-indicator"><FileText size={12} /></span>}
     </article>
   );
 }
@@ -711,9 +728,22 @@ function SortableDesktop({
 
 type CardDraft = Omit<CardItem, "id"> & { columnId: string };
 
+type CopiedTextFormat = {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikeThrough: boolean;
+  block: string;
+  foreground: string;
+  background: string;
+  alignment: "justifyLeft" | "justifyCenter" | "justifyRight" | "justifyFull";
+};
+
 function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Range | null>(null);
+  const copiedFormatRef = useRef<CopiedTextFormat | null>(null);
+  const [formatPainterActive, setFormatPainterActive] = useState(false);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -742,6 +772,60 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     editorRef.current?.focus();
     restoreSelection();
     document.execCommand(command, false, commandValue);
+    rememberSelection();
+    syncValue();
+  }
+
+  function toggleFormatPainter() {
+    if (formatPainterActive) {
+      copiedFormatRef.current = null;
+      setFormatPainterActive(false);
+      return;
+    }
+
+    restoreSelection();
+    const alignment = document.queryCommandState("justifyCenter")
+      ? "justifyCenter"
+      : document.queryCommandState("justifyRight")
+        ? "justifyRight"
+        : document.queryCommandState("justifyFull")
+          ? "justifyFull"
+          : "justifyLeft";
+    copiedFormatRef.current = {
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+      strikeThrough: document.queryCommandState("strikeThrough"),
+      block: document.queryCommandValue("formatBlock"),
+      foreground: document.queryCommandValue("foreColor"),
+      background: document.queryCommandValue("hiliteColor") || document.queryCommandValue("backColor"),
+      alignment,
+    };
+    setFormatPainterActive(true);
+  }
+
+  function applyCopiedFormat() {
+    const editor = editorRef.current;
+    const format = copiedFormatRef.current;
+    const selection = window.getSelection();
+    if (!editor || !format || !selection?.rangeCount || selection.isCollapsed || !editor.contains(selection.anchorNode)) {
+      rememberSelection();
+      return;
+    }
+
+    document.execCommand("removeFormat", false);
+    if (format.block) document.execCommand("formatBlock", false, format.block);
+    if (format.bold) document.execCommand("bold", false);
+    if (format.italic) document.execCommand("italic", false);
+    if (format.underline) document.execCommand("underline", false);
+    if (format.strikeThrough) document.execCommand("strikeThrough", false);
+    if (format.foreground) document.execCommand("foreColor", false, format.foreground);
+    if (format.background && format.background !== "transparent") {
+      document.execCommand("hiliteColor", false, format.background);
+    }
+    document.execCommand(format.alignment, false);
+    copiedFormatRef.current = null;
+    setFormatPainterActive(false);
     rememberSelection();
     syncValue();
   }
@@ -786,10 +870,25 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
         {toolbarButton("Lista com marcadores", <List size={16} />, "insertUnorderedList")}
         {toolbarButton("Lista numerada", <ListOrdered size={16} />, "insertOrderedList")}
         {toolbarButton("Checklist", <ListChecks size={16} />, "insertHTML", '<div class="rich-check-item"><input type="checkbox"> <span>Item da lista</span></div><div><br></div>')}
+        <span className="toolbar-divider" />
+        <button
+          type="button"
+          className={formatPainterActive ? "is-active" : ""}
+          aria-label={formatPainterActive ? "Cancelar pincel de formatação" : "Copiar formatação"}
+          aria-pressed={formatPainterActive}
+          title={formatPainterActive ? "Selecione o texto que receberá a formatação" : "Pincel de formatação: copie o estilo do texto selecionado"}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            rememberSelection();
+            toggleFormatPainter();
+          }}
+        >
+          <Paintbrush size={15} />
+        </button>
       </div>
       <div
         ref={editorRef}
-        className="rich-description-editor"
+        className={`rich-description-editor ${formatPainterActive ? "is-format-painting" : ""}`}
         contentEditable
         suppressContentEditableWarning
         role="textbox"
@@ -798,7 +897,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
         data-placeholder="Escreva a descrição, links, listas ou observações…"
         onInput={syncValue}
         onKeyUp={rememberSelection}
-        onMouseUp={rememberSelection}
+        onMouseUp={applyCopiedFormat}
         onFocus={rememberSelection}
         onClick={(event) => {
           const target = event.target;
@@ -910,7 +1009,7 @@ function CardModal({
             <section className="activity-journal">
               <div className="drawer-section-heading"><span>Diário de atividades</span><small>{draft.activity?.length ?? 0} registros</small></div>
               <div className="activity-composer">
-                <textarea value={activityText} onChange={(event) => setActivityText(event.target.value)} placeholder="O que você fez? O que ainda falta?" rows={3} />
+                <textarea value={activityText} onChange={(event) => setActivityText(event.target.value)} placeholder="Atualização rápida…" rows={2} />
                 <button type="button" className="primary-button" disabled={!activityText.trim()} onClick={addActivity}>Adicionar registro</button>
               </div>
               <div className="activity-list">
@@ -1153,6 +1252,17 @@ function WeeklyPlannerGrid({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 6 } }),
   );
+
+  useEffect(() => {
+    function clearSelectionWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSelectedKeys((current) => current.size > 0 ? new Set() : current);
+      }
+    }
+
+    window.addEventListener("keydown", clearSelectionWithEscape);
+    return () => window.removeEventListener("keydown", clearSelectionWithEscape);
+  }, []);
 
   function focusCell(row: number, column: number) {
     const boundedRow = Math.max(0, Math.min(WEEK_TIME_SLOTS.length - 1, row));
