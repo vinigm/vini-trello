@@ -374,6 +374,27 @@ select:focus-visible {
   font-style: normal;
 }
 
+.add-desktop-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px dashed rgba(83, 73, 78, 0.24);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.add-desktop-button:hover {
+  border-color: rgba(239, 112, 95, 0.5);
+  color: var(--coral-dark);
+  background: rgba(239, 112, 95, 0.08);
+}
+
 .project-tabs-bar {
   min-height: 52px;
   padding: 7px 12px;
@@ -585,6 +606,80 @@ select:focus-visible {
 }
 
 .avatar-button { padding: 0; }
+
+.desktop-stack {
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(72, 63, 61, 0.16) transparent;
+}
+
+.desktop-stack::-webkit-scrollbar { width: 8px; }
+.desktop-stack::-webkit-scrollbar-thumb { background: rgba(72, 63, 61, 0.16); border-radius: 99px; }
+
+.desktop-board {
+  --desktop-accent: var(--coral);
+  --desktop-surface: rgba(249, 235, 227, 0.5);
+  min-width: 0;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--desktop-accent), transparent 68%);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--desktop-accent), transparent 96%), transparent 36%),
+    var(--desktop-surface);
+}
+
+.desktop-board:last-child { border-bottom: 0; }
+
+.desktop-title-bar {
+  min-height: 36px;
+  margin: 0 12px 7px;
+  padding: 0 7px 0 11px;
+  border: 1px solid color-mix(in srgb, var(--desktop-accent), transparent 64%);
+  border-left: 3px solid var(--desktop-accent);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 2px 7px rgba(48, 40, 37, 0.045);
+}
+
+.desktop-title-bar h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.desktop-settings-button:hover { color: var(--ink); background: rgba(110, 103, 112, 0.08); }
+
+.desktop-board-scroll {
+  min-height: 0;
+  padding-bottom: 4px;
+  flex: none;
+}
 
 .board-toolbar {
   padding: 14px 14px 12px;
@@ -1493,6 +1588,7 @@ select:focus-visible {
   .topbar-brand strong { display: none; }
   .top-nav { gap: 2px; }
   .top-nav-item { width: 34px; min-height: 34px; }
+  .add-desktop-button { width: 32px; height: 32px; }
   .project-tabs-bar { min-height: 48px; padding: 5px 6px; }
   .project-tabs-scroll { gap: 3px; }
   .project-tab,
@@ -1519,6 +1615,10 @@ select:focus-visible {
   .toolbar-actions .primary-button { width: 40px; padding: 0; font-size: 0; }
   .toolbar-actions .primary-button svg { width: 19px; height: 19px; }
   .filter-summary { margin: -2px 10px 9px; }
+  .desktop-board { padding: 6px 0 8px; }
+  .desktop-title-bar { min-height: 34px; margin: 0 8px 6px; padding-left: 9px; }
+  .desktop-title-bar h1 { font-size: 14px; }
+  .desktop-settings-button { width: 27px; height: 27px; }
   .board-scroll {
     padding: 0 9px 12px;
     grid-auto-columns: calc(100vw - 28px);

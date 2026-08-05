@@ -39,7 +39,6 @@ import {
   CloudOff,
   Columns3,
   LayoutDashboard,
-  ListFilter,
   LoaderCircle,
   LogIn,
   MoreHorizontal,
@@ -262,10 +261,11 @@ const THEME_ACCENTS: Record<Theme, string> = {
   midnight: "#6f7fe8",
 };
 
-const PRIORITY_LABELS: Record<Priority, string> = {
-  low: "Baixa",
-  medium: "Média",
-  high: "Alta",
+const THEME_SURFACES: Record<Theme, string> = {
+  peach: "rgba(249, 235, 227, 0.5)",
+  lilac: "rgba(237, 233, 248, 0.52)",
+  ocean: "rgba(229, 242, 240, 0.52)",
+  midnight: "rgba(230, 229, 240, 0.5)",
 };
 
 function makeId(prefix: string) {
@@ -618,19 +618,19 @@ function ProjectModal({
       <section className="modal-card project-editor" role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
         <div className="modal-heading">
           <div className="modal-icon"><LayoutDashboard size={19} /></div>
-          <div><span>Novo desktop</span><h2 id="project-modal-title">Criar um projeto</h2></div>
+          <div><span>Novo desktop</span><h2 id="project-modal-title">Criar um desktop</h2></div>
           <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}><X size={20} /></button>
         </div>
         <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) onSave(title.trim()); }}>
           <label className="field full-field">
-            <span>Nome do projeto</span>
+            <span>Nome do desktop</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Casa, Viagem ou Trabalho" required />
           </label>
-          <p className="project-editor-note">O novo projeto começa com quatro colunas vazias e fica totalmente separado dos outros.</p>
+          <p className="project-editor-note">O novo desktop começa com quatro colunas vazias e fica totalmente separado dos outros.</p>
           <div className="modal-actions">
             <span className="modal-spacer" />
             <button type="button" className="text-button" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="primary-button">Criar projeto</button>
+            <button type="submit" className="primary-button">Criar desktop</button>
           </div>
         </form>
       </section>
@@ -648,23 +648,26 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [query, setQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
-  const [activeCardId, setActiveCardId] = useState<string | null>(null);
-  const [cardModal, setCardModal] = useState<{ mode: "new" | "edit"; columnId: string; cardId?: string } | null>(null);
-  const [columnModal, setColumnModal] = useState<{ mode: "new" | "edit"; columnId?: string } | null>(null);
+  const [activeDrag, setActiveDrag] = useState<{ boardId: string; cardId: string } | null>(null);
+  const [cardModal, setCardModal] = useState<{ boardId: string; mode: "new" | "edit"; columnId: string; cardId?: string } | null>(null);
+  const [columnModal, setColumnModal] = useState<{ boardId: string; mode: "new" | "edit"; columnId?: string } | null>(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const saveRequest = useRef(0);
   const board = workspaceState.boards.find((candidate) => candidate.id === workspaceState.activeBoardId)
     ?? workspaceState.boards[0];
 
-  function setBoard(update: (current: BoardState) => BoardState) {
+  function setBoard(update: (current: BoardState) => BoardState, boardId = workspaceState.activeBoardId) {
     setWorkspaceState((current) => ({
       ...current,
       boards: current.boards.map((candidate) =>
-        candidate.id === current.activeBoardId ? update(candidate) : candidate,
+        candidate.id === boardId ? update(candidate) : candidate,
       ),
     }));
+  }
+
+  function activateBoard(boardId: string) {
+    setWorkspaceState((current) => ({ ...current, activeBoardId: boardId }));
   }
 
   const sensors = useSensors(
@@ -739,15 +742,6 @@ export default function Home() {
     setSaveStatus("loading");
   }
 
-  function selectProject(projectId: string) {
-    setWorkspaceState((current) => ({ ...current, activeBoardId: projectId }));
-    setQuery("");
-    setPriorityFilter("all");
-    setCardModal(null);
-    setColumnModal(null);
-    setShowFilters(false);
-  }
-
   function createProject(title: string) {
     const projectId = makeId("project");
     const themes: Theme[] = ["peach", "ocean", "lilac", "midnight"];
@@ -765,7 +759,7 @@ export default function Home() {
 
   function deleteProject() {
     if (workspaceState.boards.length <= 1) return;
-    if (!window.confirm(`Excluir o projeto “${board.title}” e todos os cartões dele?`)) return;
+    if (!window.confirm(`Excluir o desktop “${board.title}” e todos os cartões dele?`)) return;
     setWorkspaceState((current) => {
       const remaining = current.boards.filter((candidate) => candidate.id !== current.activeBoardId);
       return { activeBoardId: remaining[0].id, boards: remaining };
@@ -775,28 +769,43 @@ export default function Home() {
     setPriorityFilter("all");
   }
 
-  const filteredCards = useMemo(() => {
+  const visibleIdsByBoard = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
-    return board.cards.filter((card) => {
-      const matchesQuery = !normalizedQuery || `${card.title} ${card.description} ${card.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery);
-      const matchesPriority = priorityFilter === "all" || card.priority === priorityFilter;
-      return matchesQuery && matchesPriority;
-    });
-  }, [board.cards, priorityFilter, query]);
+    return new Map(workspaceState.boards.map((project) => {
+      const ids = project.cards.filter((card) => {
+        const matchesQuery = !normalizedQuery || `${card.title} ${card.description} ${card.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery);
+        const matchesPriority = priorityFilter === "all" || card.priority === priorityFilter;
+        return matchesQuery && matchesPriority;
+      }).map((card) => card.id);
+      return [project.id, new Set(ids)];
+    }));
+  }, [priorityFilter, query, workspaceState.boards]);
 
-  const visibleIds = useMemo(() => new Set(filteredCards.map((card) => card.id)), [filteredCards]);
-  const activeCard = board.cards.find((card) => card.id === activeCardId);
-  const modalCard = cardModal?.cardId ? board.cards.find((card) => card.id === cardModal.cardId) : undefined;
-  const modalColumn = columnModal?.columnId ? board.columns.find((column) => column.id === columnModal.columnId) : undefined;
+  const filteredCardCount = useMemo(
+    () => [...visibleIdsByBoard.values()].reduce((total, ids) => total + ids.size, 0),
+    [visibleIdsByBoard],
+  );
+  const highPriorityCount = useMemo(
+    () => workspaceState.boards.reduce((total, project) => total + project.cards.filter((card) => card.priority === "high").length, 0),
+    [workspaceState.boards],
+  );
+  const activeCard = activeDrag
+    ? workspaceState.boards.find((project) => project.id === activeDrag.boardId)?.cards.find((card) => card.id === activeDrag.cardId)
+    : undefined;
+  const cardModalBoard = workspaceState.boards.find((project) => project.id === cardModal?.boardId) ?? board;
+  const columnModalBoard = workspaceState.boards.find((project) => project.id === columnModal?.boardId) ?? board;
+  const modalCard = cardModal?.cardId ? cardModalBoard.cards.find((card) => card.id === cardModal.cardId) : undefined;
+  const modalColumn = columnModal?.columnId ? columnModalBoard.columns.find((column) => column.id === columnModal.columnId) : undefined;
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveCardId(String(event.active.id));
+  function handleDragStart(boardId: string, event: DragStartEvent) {
+    activateBoard(boardId);
+    setActiveDrag({ boardId, cardId: String(event.active.id) });
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  function handleDragEnd(boardId: string, event: DragEndEvent) {
     const draggedId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
-    setActiveCardId(null);
+    setActiveDrag(null);
     if (!overId || draggedId === overId) return;
 
     setBoard((current) => {
@@ -834,10 +843,12 @@ export default function Home() {
           return column;
         }),
       };
-    });
+    }, boardId);
   }
 
   function saveCard(draft: CardDraft) {
+    if (!cardModal) return;
+    const boardId = cardModal.boardId;
     if (cardModal?.mode === "edit" && cardModal.cardId) {
       const cardId = cardModal.cardId;
       setBoard((current) => {
@@ -851,29 +862,31 @@ export default function Home() {
             return column;
           }),
         };
-      });
+      }, boardId);
     } else {
       const id = makeId("card");
       setBoard((current) => ({
         ...current,
         cards: [...current.cards, { ...draft, id }],
         columns: current.columns.map((column) => column.id === draft.columnId ? { ...column, cardIds: [...column.cardIds, id] } : column),
-      }));
+      }), boardId);
     }
     setCardModal(null);
   }
 
   function deleteCard(cardId: string) {
+    if (!cardModal) return;
     if (!window.confirm("Excluir este cartão?")) return;
     setBoard((current) => ({
       ...current,
       cards: current.cards.filter((card) => card.id !== cardId),
       columns: current.columns.map((column) => ({ ...column, cardIds: column.cardIds.filter((id) => id !== cardId) })),
-    }));
+    }), cardModal.boardId);
     setCardModal(null);
   }
 
   function moveCard(cardId: string, direction: -1 | 1) {
+    if (!cardModal) return;
     setBoard((current) => {
       const source = findColumnForCard(current, cardId);
       if (!source) return current;
@@ -889,26 +902,27 @@ export default function Home() {
           return column;
         }),
       };
-    });
+    }, cardModal.boardId);
   }
 
   function saveColumn(title: string, color: string) {
+    if (!columnModal) return;
     if (columnModal?.mode === "edit" && columnModal.columnId) {
-      setBoard((current) => ({ ...current, columns: current.columns.map((column) => column.id === columnModal.columnId ? { ...column, title, color } : column) }));
+      setBoard((current) => ({ ...current, columns: current.columns.map((column) => column.id === columnModal.columnId ? { ...column, title, color } : column) }), columnModal.boardId);
     } else {
-      setBoard((current) => ({ ...current, columns: [...current.columns, { id: makeId("column"), title, color, cardIds: [] }] }));
+      setBoard((current) => ({ ...current, columns: [...current.columns, { id: makeId("column"), title, color, cardIds: [] }] }), columnModal.boardId);
     }
     setColumnModal(null);
   }
 
   function deleteColumn(columnId: string) {
-    if (board.columns.length <= 1 || !window.confirm("Excluir esta coluna? Os cartões serão movidos para a primeira coluna.")) return;
+    if (!columnModal || columnModalBoard.columns.length <= 1 || !window.confirm("Excluir esta coluna? Os cartões serão movidos para a primeira coluna.")) return;
     setBoard((current) => {
       const removed = current.columns.find((column) => column.id === columnId);
       const remaining = current.columns.filter((column) => column.id !== columnId);
       if (removed?.cardIds.length) remaining[0] = { ...remaining[0], cardIds: [...remaining[0].cardIds, ...removed.cardIds] };
       return { ...current, columns: remaining };
-    });
+    }, columnModal.boardId);
     setColumnModal(null);
   }
 
@@ -948,15 +962,16 @@ export default function Home() {
   const initials = getInitials(user);
 
   return (
-    <main className={`app-shell theme-${board.theme}`}>
+    <main className="app-shell multi-board-shell">
       <section className="workspace">
         <header className="topbar">
           <div className="topbar-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>vinello</strong></div>
           <nav className="top-nav" aria-label="Navegação principal">
-            <button type="button" className="top-nav-item active"><LayoutDashboard size={17} /><span>Quadro</span></button>
+            <button type="button" className={`top-nav-item ${priorityFilter === "all" ? "active" : ""}`} onClick={() => { setQuery(""); setPriorityFilter("all"); }}><LayoutDashboard size={17} /><span>Quadro</span></button>
             <button type="button" className="top-nav-item" onClick={() => { setQuery(""); setPriorityFilter("all"); }}><CalendarDays size={17} /><span>Planejamento</span></button>
-            <button type="button" className="top-nav-item" onClick={() => setPriorityFilter("high")}><Sparkles size={17} /><span>Foco</span><em>{board.cards.filter((card) => card.priority === "high").length}</em></button>
+            <button type="button" className={`top-nav-item ${priorityFilter === "high" ? "active" : ""}`} onClick={() => setPriorityFilter("high")}><Sparkles size={17} /><span>Foco</span><em>{highPriorityCount}</em></button>
           </nav>
+          <button type="button" className="add-desktop-button" aria-label="Adicionar desktop" title="Adicionar desktop" onClick={() => setShowProjectModal(true)}><Plus size={18} /></button>
           <div className="search-wrap">
             <Search size={18} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" />
@@ -975,66 +990,40 @@ export default function Home() {
           </div>
         </header>
 
-        <nav className="project-tabs-bar" aria-label="Projetos">
-          <div className="project-tabs-scroll" role="tablist" aria-label="Alternar projeto">
-            {workspaceState.boards.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                role="tab"
-                aria-selected={project.id === board.id}
-                className={`project-tab ${project.id === board.id ? "active" : ""}`}
-                style={{ "--project-accent": THEME_ACCENTS[project.theme] } as CSSProperties}
-                onClick={() => selectProject(project.id)}
-              >
-                <i aria-hidden="true" />
-                <span>{project.title}</span>
-                <em>{project.cards.length}</em>
-              </button>
-            ))}
-            <button type="button" className="new-project-tab" onClick={() => setShowProjectModal(true)}>
-              <Plus size={15} /><span>Novo projeto</span>
-            </button>
-          </div>
-        </nav>
-
-        <div className="board-toolbar">
-          <div className="board-heading">
-            <span className="eyebrow">Projeto independente <i /></span>
-            <h1>{board.title}</h1>
-            <p>Organize suas ideias, escolha prioridades e siga no seu ritmo.</p>
-          </div>
-          <div className="toolbar-actions">
-            <div className="popover-wrap">
-              <button type="button" className={`secondary-button ${priorityFilter !== "all" ? "button-active" : ""}`} onClick={() => setShowFilters((value) => !value)}><ListFilter size={17} /> Filtrar {priorityFilter !== "all" && <span>1</span>}</button>
-              {showFilters && (
-                <div className="filter-popover">
-                  <div><strong>Filtrar cartões</strong><button type="button" className="icon-button" onClick={() => setShowFilters(false)}><X size={17} /></button></div>
-                  <label className={priorityFilter === "all" ? "selected" : ""}><input type="radio" name="priority" checked={priorityFilter === "all"} onChange={() => setPriorityFilter("all")} /> Todas as prioridades</label>
-                  {(["high", "medium", "low"] as Priority[]).map((priority) => <label key={priority} className={priorityFilter === priority ? "selected" : ""}><input type="radio" name="priority" checked={priorityFilter === priority} onChange={() => setPriorityFilter(priority)} /><i className={`filter-dot priority-${priority}`} /> {PRIORITY_LABELS[priority]}</label>)}
-                </div>
-              )}
-            </div>
-            <button type="button" className="secondary-button customize-button" onClick={() => setShowCustomizer(true)}><SlidersHorizontal size={17} /> Personalizar</button>
-            <button type="button" className="primary-button" onClick={() => setCardModal({ mode: "new", columnId: board.columns[0].id })}><Plus size={18} /> Novo cartão</button>
-          </div>
-        </div>
-
         {(query || priorityFilter !== "all") && (
-          <div className="filter-summary"><span>{filteredCards.length} {filteredCards.length === 1 ? "cartão encontrado" : "cartões encontrados"}</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
+          <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
         )}
 
-        <DndContext id="vinello-board-dnd" sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
-          <div className="board-scroll" aria-label="Quadro Kanban">
-            {board.columns.map((column) => {
-              const cards = column.cardIds.map((id) => board.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
-              return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => setCardModal({ mode: "new", columnId })} onOpenCard={(cardId) => setCardModal({ mode: "edit", columnId: column.id, cardId })} onEditColumn={(columnId) => setColumnModal({ mode: "edit", columnId })} />;
-            })}
-            <button type="button" className="add-column-button" onClick={() => setColumnModal({ mode: "new" })}><span><Plus size={19} /></span><strong>Adicionar coluna</strong><small>Crie uma nova etapa</small></button>
-          </div>
-          <DragOverlay>{activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
-        </DndContext>
-
+        <div className="desktop-stack">
+          {workspaceState.boards.map((project) => {
+            const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
+            return (
+              <section
+                key={project.id}
+                className="desktop-board"
+                style={{
+                  "--desktop-accent": THEME_ACCENTS[project.theme],
+                  "--desktop-surface": THEME_SURFACES[project.theme],
+                } as CSSProperties}
+              >
+                <header className="desktop-title-bar">
+                  <h1>{project.title}</h1>
+                  <button type="button" className="desktop-settings-button" aria-label={`Personalizar desktop ${project.title}`} title="Personalizar desktop" onClick={() => { activateBoard(project.id); setShowCustomizer(true); }}><SlidersHorizontal size={15} /></button>
+                </header>
+                <DndContext id={`vinello-board-dnd-${project.id}`} sensors={sensors} collisionDetection={closestCorners} onDragStart={(event) => handleDragStart(project.id, event)} onDragEnd={(event) => handleDragEnd(project.id, event)} onDragCancel={() => setActiveDrag(null)}>
+                  <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
+                    {project.columns.map((column) => {
+                      const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
+                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
+                    })}
+                    <button type="button" className="add-column-button" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><span><Plus size={19} /></span><strong>Adicionar coluna</strong><small>Crie uma nova etapa</small></button>
+                  </div>
+                  <DragOverlay>{activeDrag?.boardId === project.id && activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
+                </DndContext>
+              </section>
+            );
+          })}
+        </div>
       </section>
 
       {showProjectModal && (
@@ -1043,10 +1032,10 @@ export default function Home() {
 
       {cardModal && (
         <CardModal
-          key={`${cardModal.mode}-${cardModal.cardId ?? cardModal.columnId}`}
+          key={`${cardModal.boardId}-${cardModal.mode}-${cardModal.cardId ?? cardModal.columnId}`}
           card={modalCard}
           columnId={cardModal.columnId}
-          columns={board.columns}
+          columns={cardModalBoard.columns}
           onClose={() => setCardModal(null)}
           onSave={saveCard}
           onDelete={modalCard ? () => deleteCard(modalCard.id) : undefined}
@@ -1056,9 +1045,9 @@ export default function Home() {
 
       {columnModal && (
         <ColumnModal
-          key={`${columnModal.mode}-${columnModal.columnId ?? "new"}`}
+          key={`${columnModal.boardId}-${columnModal.mode}-${columnModal.columnId ?? "new"}`}
           column={modalColumn}
-          canDelete={board.columns.length > 1}
+          canDelete={columnModalBoard.columns.length > 1}
           onClose={() => setColumnModal(null)}
           onSave={saveColumn}
           onDelete={modalColumn ? () => deleteColumn(modalColumn.id) : undefined}
@@ -1069,15 +1058,15 @@ export default function Home() {
         <div className="customizer-backdrop">
           <button type="button" className="backdrop-dismiss" aria-label="Fechar personalização" onClick={() => setShowCustomizer(false)} />
           <aside className="customizer-panel" role="dialog" aria-modal="true" aria-labelledby="customizer-title">
-            <div className="customizer-header"><div><span>Seu espaço, suas regras</span><h2 id="customizer-title">Personalizar quadro</h2></div><button type="button" className="icon-button" aria-label="Fechar" onClick={() => setShowCustomizer(false)}><X size={20} /></button></div>
-            <label className="field full-field"><span>Nome do projeto</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
+            <div className="customizer-header"><div><span>Seu espaço, suas regras</span><h2 id="customizer-title">Personalizar desktop</h2></div><button type="button" className="icon-button" aria-label="Fechar" onClick={() => setShowCustomizer(false)}><X size={20} /></button></div>
+            <label className="field full-field"><span>Nome do desktop</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
             <div className="theme-section"><span>Tema do fundo</span><div className="theme-grid">{THEME_OPTIONS.map((theme) => (
               <button key={theme.id} type="button" className={`theme-option ${board.theme === theme.id ? "selected" : ""}`} onClick={() => setBoard((current) => ({ ...current, theme: theme.id }))}>
                 <span className="theme-preview" style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})` }}>{board.theme === theme.id && <Check size={18} />}</span><strong>{theme.name}</strong>
               </button>
             ))}</div></div>
             <div className="customizer-tip"><Sparkles size={20} /><div><strong>Dica de organização</strong><p>Clique nos três pontos de cada coluna para trocar seu nome e sua cor.</p></div></div>
-            {workspaceState.boards.length > 1 && <button type="button" className="danger-button full-button" onClick={deleteProject}><Trash2 size={16} /> Excluir este projeto</button>}
+            {workspaceState.boards.length > 1 && <button type="button" className="danger-button full-button" onClick={deleteProject}><Trash2 size={16} /> Excluir este desktop</button>}
             <button type="button" className="primary-button full-button" onClick={() => setShowCustomizer(false)}>Pronto</button>
           </aside>
         </div>
