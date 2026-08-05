@@ -1016,7 +1016,7 @@ export default function Home() {
                       const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
                       return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
                     })}
-                    <button type="button" className="add-column-button" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><span><Plus size={19} /></span><strong>Adicionar coluna</strong><small>Crie uma nova etapa</small></button>
+                    <button type="button" className="add-column-button" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><span><Plus size={19} /></span><strong>Adicionar outra lista</strong><small>Crie uma nova etapa</small></button>
                   </div>
                   <DragOverlay>{activeDrag?.boardId === project.id && activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
                 </DndContext>
