@@ -39,6 +39,7 @@ import {
   ArrowRight,
   Bell,
   Bold,
+  Briefcase,
   CalendarDays,
   Check,
   Cloud,
@@ -129,6 +130,7 @@ type SaveStatus = "loading" | "saving" | "saved" | "offline";
 
 const LABEL_COLORS = ["#f26b5f", "#f4a340", "#8d79e8", "#38a88f", "#4d8fd9"];
 const COLUMN_COLORS = ["#f8dddd", "#dce8f4", "#dcecdf", "#f3ead1", "#ece2f3", "#e5e7eb", "#d9e8e7", "#ebe6df"];
+const WORK_SLOT_COLOR = "#f6aaa7";
 
 const DEFAULT_BOARD: BoardState = {
   id: "pessoal",
@@ -1396,6 +1398,7 @@ function PlanningWorkspace({
   onChangeColors,
   onMoveSlot,
   onMoveSlots,
+  onFillWorkWeek,
 }: {
   mode: PlanningMode;
   cursor: Date;
@@ -1407,6 +1410,7 @@ function PlanningWorkspace({
   onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
   onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
+  onFillWorkWeek: (days: Date[]) => void;
 }) {
   const weekStart = startOfWeek(cursor);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -1428,7 +1432,21 @@ function PlanningWorkspace({
       </nav>
 
       <header className="planner-header">
-        <div><span>Planejamento</span><h1>{mode === "year" ? cursor.getFullYear() : monthTitle}</h1></div>
+        <div>
+          <span>Planejamento</span>
+          <h1>{mode === "year" ? cursor.getFullYear() : monthTitle}</h1>
+          {mode === "week" && (
+            <button
+              type="button"
+              className="fill-work-button"
+              title="Preencher os horários de trabalho desta semana"
+              onClick={() => onFillWorkWeek(weekDays)}
+            >
+              <Briefcase size={13} />
+              Trabalho
+            </button>
+          )}
+        </div>
         <div className="planner-navigation">
           <button type="button" aria-label="Período anterior" onClick={() => shiftCursor(-1)}><ArrowLeft size={17} /></button>
           <button type="button" onClick={() => onChangeCursor(new Date())}>Hoje</button>
@@ -1559,6 +1577,25 @@ export default function Home() {
       const plannerSlotColors = { ...current.plannerSlotColors };
       moving.forEach(({ sourceKey }) => { plannerNotes[sourceKey] = ""; plannerSlotColors[sourceKey] = "#ffffff"; });
       moving.forEach(({ targetKey, value, color }) => { plannerNotes[targetKey] = value; plannerSlotColors[targetKey] = color; });
+      return { ...current, plannerNotes, plannerSlotColors };
+    });
+  }
+
+  function fillWorkWeek(days: Date[]) {
+    const workTimes = WEEK_TIME_SLOTS.filter((time) => (
+      (time >= "08:00" && time <= "12:00")
+      || (time >= "13:30" && time <= "17:00")
+    ));
+    const workKeys = days.slice(0, 5).flatMap((date) => workTimes.map((time) => weekSlotKey(date, time)));
+
+    setWorkspaceState((current) => {
+      const plannerNotes = { ...current.plannerNotes };
+      const plannerSlotColors = { ...current.plannerSlotColors };
+      workKeys.forEach((key) => {
+        if (plannerNotes[key]?.trim()) return;
+        plannerNotes[key] = "Trabalho";
+        plannerSlotColors[key] = WORK_SLOT_COLOR;
+      });
       return { ...current, plannerNotes, plannerSlotColors };
     });
   }
@@ -1930,7 +1967,7 @@ export default function Home() {
         </header>
 
         {activeView === "planning" ? (
-          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} />
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} />
         ) : <>
           {(query || priorityFilter !== "all") && (
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} nos desktops visíveis</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
