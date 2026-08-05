@@ -1972,8 +1972,9 @@ select:focus-visible {
 }
 
 .diary-heading,
-.diary-editor {
-  width: min(1080px, 100%);
+.diary-composer,
+.diary-feed {
+  width: min(760px, 100%);
   margin-inline: auto;
 }
 
@@ -1997,8 +1998,70 @@ select:focus-visible {
 
 .diary-heading h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.035em; }
 .diary-heading p { margin: 2px 0 0; color: #77746d; font-size: 10px; }
-.diary-editor .rich-editor-shell { box-shadow: 0 8px 26px rgba(62, 57, 48, 0.06); }
-.diary-editor .rich-description-editor { min-height: calc(100dvh - 190px); padding: 22px; font-size: 14px; line-height: 1.7; }
+
+.diary-composer {
+  padding: 10px;
+  border: 1px solid rgba(46, 43, 48, 0.13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 7px 22px rgba(62, 57, 48, 0.05);
+}
+
+.diary-composer .rich-description-editor,
+.diary-post-editor .rich-description-editor {
+  min-height: 112px;
+  max-height: 250px;
+  padding: 13px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.diary-composer-actions,
+.diary-post-editor-actions {
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.diary-composer-actions small { margin-right: auto; color: #88847c; font-size: 9px; }
+.diary-composer-actions .primary-button,
+.diary-post-editor-actions .primary-button { min-height: 31px; padding-inline: 14px; }
+.diary-composer-actions .primary-button:disabled,
+.diary-post-editor-actions .primary-button:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.diary-feed { margin-top: 12px; display: grid; gap: 9px; }
+
+.diary-post {
+  padding: 12px 13px;
+  border: 1px solid rgba(46, 43, 48, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 4px 14px rgba(62, 57, 48, 0.04);
+}
+
+.diary-post > header { min-height: 25px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.diary-post > header > div:first-child { display: flex; align-items: center; gap: 7px; }
+.diary-post time { color: #6c7077; font-size: 9px; font-weight: 750; }
+.diary-post > header small { color: #9a9690; font-size: 8px; }
+.diary-post-actions { display: flex; gap: 2px; }
+.diary-post-actions button { width: 25px; height: 25px; padding: 0; border: 0; border-radius: 5px; display: grid; place-items: center; color: #777d85; background: transparent; cursor: pointer; }
+.diary-post-actions button:hover { color: #303943; background: #edf0f2; }
+.diary-post-actions button:last-child:hover { color: #b5473f; background: #fbe9e7; }
+
+.diary-post-content { padding: 3px 2px 1px; color: #303238; font-size: 12px; line-height: 1.6; }
+.diary-post-content h2 { margin: 8px 0 5px; font-size: 18px; }
+.diary-post-content p { margin: 0 0 7px; }
+.diary-post-content ul,
+.diary-post-content ol { margin: 6px 0; padding-left: 22px; }
+.diary-post-content blockquote { margin: 7px 0; padding: 4px 10px; border-left: 3px solid #9aa8b8; color: #5e6570; }
+.diary-post-editor { padding-top: 5px; }
+
+.diary-empty { padding: 28px 12px; display: grid; place-items: center; gap: 4px; color: #8e8a83; text-align: center; }
+.diary-empty strong { color: #65635f; font-size: 11px; }
+.diary-empty p { margin: 0; font-size: 9px; }
 
 .activity-journal { padding-top: 2px; }
 .activity-composer { padding: 7px 8px; border: 1px solid rgba(46, 43, 48, 0.13); border-radius: 9px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; background: #fff; }
@@ -2558,7 +2621,11 @@ select:focus-visible {
   .diary-workspace { padding: 10px 8px; }
   .diary-heading { margin-bottom: 8px; }
   .diary-heading p { display: none; }
-  .diary-editor .rich-description-editor { min-height: calc(100dvh - 190px); padding: 15px; font-size: 13px; }
+  .diary-composer { padding: 7px; }
+  .diary-composer .rich-description-editor,
+  .diary-post-editor .rich-description-editor { min-height: 100px; padding: 11px; }
+  .diary-composer-actions small { display: none; }
+  .diary-post { padding: 10px; }
   .card-drawer-actions { min-height: 60px; padding: 9px 13px; }
 }
 

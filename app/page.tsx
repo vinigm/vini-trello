@@ -129,6 +129,14 @@ type WorkspaceState = {
   plannerWorkSlots: string[];
   plannerActivities: Record<string, PlannerActivity[]>;
   diaryContent: string;
+  diaryPosts: DiaryPost[];
+};
+
+type DiaryPost = {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt?: string;
 };
 
 type PlannerActivity = {
@@ -405,6 +413,12 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     const plannerNotes = { ...(workspace.plannerNotes ?? {}) };
     const plannerSlotColors = { ...(workspace.plannerSlotColors ?? {}) };
     const plannerWorkSlots = new Set(workspace.plannerWorkSlots ?? []);
+    const diaryContent = workspace.diaryContent ?? "";
+    const diaryPosts = workspace.diaryPosts?.length
+      ? workspace.diaryPosts
+      : diaryContent.trim()
+        ? [{ id: "diary-legacy", content: diaryContent, createdAt: new Date().toISOString() }]
+        : [];
     const seededWorkWeeks = new Set<string>();
 
     Object.entries(plannerNotes).forEach(([key, value]) => {
@@ -442,7 +456,8 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
       plannerSlotColors,
       plannerWorkSlots: [...plannerWorkSlots],
       plannerActivities: workspace.plannerActivities ?? {},
-      diaryContent: workspace.diaryContent ?? "",
+      diaryContent,
+      diaryPosts,
     };
   }
 
@@ -463,6 +478,11 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     plannerWorkSlots: workspace.plannerWorkSlots ?? [],
     plannerActivities: workspace.plannerActivities ?? {},
     diaryContent: workspace.diaryContent ?? "",
+    diaryPosts: workspace.diaryPosts?.length
+      ? workspace.diaryPosts
+      : workspace.diaryContent?.trim()
+        ? [{ id: "diary-legacy", content: workspace.diaryContent, createdAt: new Date().toISOString() }]
+        : [],
   };
 }
 
@@ -481,6 +501,7 @@ const DEFAULT_WORKSPACE = migrateWorkspace({
   plannerWorkSlots: [],
   plannerActivities: {},
   diaryContent: "",
+  diaryPosts: [],
 });
 
 function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
@@ -507,6 +528,7 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       plannerWorkSlots: [],
       plannerActivities: {},
       diaryContent: "",
+      diaryPosts: [],
     });
   }
 
@@ -968,23 +990,100 @@ function RichTextEditor({
   );
 }
 
-function DiaryWorkspace({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function hasRichText(value: string) {
+  return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim().length > 0;
+}
+
+function DiaryWorkspace({
+  posts,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  posts: DiaryPost[];
+  onAdd: (content: string) => void;
+  onUpdate: (id: string, content: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+
+  function publishPost() {
+    if (!hasRichText(draft)) return;
+    onAdd(draft);
+    setDraft("");
+  }
+
+  function startEditing(post: DiaryPost) {
+    setEditingId(post.id);
+    setEditingContent(post.content);
+  }
+
+  function saveEditing() {
+    if (!editingId || !hasRichText(editingContent)) return;
+    onUpdate(editingId, editingContent);
+    setEditingId(null);
+    setEditingContent("");
+  }
+
   return (
     <section className="diary-workspace">
       <header className="diary-heading">
         <div className="diary-icon"><FileText size={20} /></div>
         <div>
           <h1>Diário</h1>
-          <p>Registre o que você fez, decisões, ideias e próximos passos.</p>
+          <p>Publique atualizações rápidas e edite conforme o dia avança.</p>
         </div>
       </header>
-      <div className="diary-editor">
+
+      <section className="diary-composer" aria-label="Nova postagem do diário">
         <RichTextEditor
-          value={value}
-          onChange={onChange}
-          ariaLabel="Conteúdo do diário"
-          placeholder="Comece a escrever seu diário…"
+          value={draft}
+          onChange={setDraft}
+          ariaLabel="Conteúdo da nova postagem"
+          placeholder="O que você fez ou está fazendo agora?"
         />
+        <div className="diary-composer-actions">
+          <small>Salvo automaticamente depois de publicar</small>
+          <button type="button" className="primary-button" disabled={!hasRichText(draft)} onClick={publishPost}>Publicar</button>
+        </div>
+      </section>
+
+      <div className="diary-feed" aria-label="Postagens do diário">
+        {[...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((post) => (
+          <article key={post.id} className="diary-post">
+            <header>
+              <div>
+                <time dateTime={post.createdAt}>{formatActivityDate(post.createdAt)}</time>
+                {post.updatedAt && <small>editado {formatActivityDate(post.updatedAt)}</small>}
+              </div>
+              <div className="diary-post-actions">
+                <button type="button" aria-label="Editar postagem" title="Editar postagem" onClick={() => startEditing(post)}><Pencil size={14} /></button>
+                <button type="button" aria-label="Excluir postagem" title="Excluir postagem" onClick={() => { if (window.confirm("Excluir esta postagem do diário?")) onDelete(post.id); }}><Trash2 size={14} /></button>
+              </div>
+            </header>
+
+            {editingId === post.id ? (
+              <div className="diary-post-editor">
+                <RichTextEditor value={editingContent} onChange={setEditingContent} ariaLabel="Editar postagem do diário" placeholder="Atualize sua postagem…" />
+                <div className="diary-post-editor-actions">
+                  <button type="button" className="text-button" onClick={() => { setEditingId(null); setEditingContent(""); }}>Cancelar</button>
+                  <button type="button" className="primary-button" disabled={!hasRichText(editingContent)} onClick={saveEditing}>Salvar alterações</button>
+                </div>
+              </div>
+            ) : (
+              <div className="diary-post-content" dangerouslySetInnerHTML={{ __html: post.content }} />
+            )}
+          </article>
+        ))}
+        {!posts.length && (
+          <div className="diary-empty">
+            <FileText size={21} />
+            <strong>Nenhuma postagem ainda</strong>
+            <p>Use o editor acima para registrar sua primeira atualização.</p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1981,6 +2080,27 @@ export default function Home() {
     });
   }
 
+  function addDiaryPost(content: string) {
+    const now = new Date().toISOString();
+    const post: DiaryPost = { id: makeId("diary-post"), content, createdAt: now };
+    setWorkspaceState((current) => ({ ...current, diaryPosts: [post, ...(current.diaryPosts ?? [])] }));
+  }
+
+  function updateDiaryPost(id: string, content: string) {
+    const updatedAt = new Date().toISOString();
+    setWorkspaceState((current) => ({
+      ...current,
+      diaryPosts: (current.diaryPosts ?? []).map((post) => post.id === id ? { ...post, content, updatedAt } : post),
+    }));
+  }
+
+  function deleteDiaryPost(id: string) {
+    setWorkspaceState((current) => ({
+      ...current,
+      diaryPosts: (current.diaryPosts ?? []).filter((post) => post.id !== id),
+    }));
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
@@ -2346,7 +2466,7 @@ export default function Home() {
         {activeView === "planning" ? (
           <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} activities={workspaceState.plannerActivities} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} onAddActivity={addPlannerActivity} onMoveActivity={movePlannerActivity} onRemoveActivity={removePlannerActivity} />
         ) : activeView === "diary" ? (
-          <DiaryWorkspace value={workspaceState.diaryContent} onChange={(diaryContent) => setWorkspaceState((current) => ({ ...current, diaryContent }))} />
+          <DiaryWorkspace posts={workspaceState.diaryPosts} onAdd={addDiaryPost} onUpdate={updateDiaryPost} onDelete={deleteDiaryPost} />
         ) : <>
           {(query || priorityFilter !== "all") && (
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} nos desktops visíveis</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
