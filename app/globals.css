@@ -1637,7 +1637,7 @@ select:focus-visible {
 }
 
 .card-drawer-heading {
-  min-height: 76px;
+  min-height: 64px;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   display: grid;
@@ -1656,11 +1656,19 @@ select:focus-visible {
   text-transform: uppercase;
 }
 
-.card-drawer-heading h2 { margin: 3px 0 0; font-size: 21px; letter-spacing: -0.025em; }
+.card-drawer-heading h2 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
 .card-drawer-form { min-height: 0; display: flex; flex: 1; flex-direction: column; }
 .card-drawer-content { min-height: 0; padding: 20px; flex: 1; overflow-y: auto; }
 .card-title-field { margin-bottom: 22px; }
-.card-title-field input { height: 46px; font-size: 15px; font-weight: 650; }
+.field.card-title-field textarea {
+  min-height: 76px;
+  padding: 15px 16px;
+  resize: none;
+  overflow-y: auto;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+}
 
 .description-section { margin-bottom: 26px; }
 .drawer-section-heading { min-height: 25px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

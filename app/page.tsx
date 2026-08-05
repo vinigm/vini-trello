@@ -963,10 +963,7 @@ function CardModal({
         aria-labelledby="card-modal-title"
       >
         <div className="card-drawer-heading">
-          <div>
-            <span>{card ? "Detalhes do cartão" : "Novo cartão"}</span>
-            <h2 id="card-modal-title">{card ? "Editar conteúdo" : "Criar cartão"}</h2>
-          </div>
+          <h2 id="card-modal-title">{card ? "Detalhes do cartão" : "Novo cartão"}</h2>
           <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>
             <X size={20} />
           </button>
@@ -976,10 +973,14 @@ function CardModal({
           <div className="card-drawer-content">
             <label className="field card-title-field">
               <span>Título</span>
-              <input
+              <textarea
                 value={draft.title}
                 onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.preventDefault();
+                }}
                 placeholder="Ex.: Planejar a próxima semana"
+                rows={2}
                 required
               />
             </label>
