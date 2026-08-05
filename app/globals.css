@@ -316,6 +316,91 @@ select:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.project-tabs-bar {
+  min-height: 56px;
+  padding: 8px 34px;
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.project-tabs-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.project-tabs-scroll {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.project-tabs-scroll::-webkit-scrollbar { display: none; }
+
+.project-tab,
+.new-project-tab {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.36);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 760;
+  transition: 160ms ease;
+}
+
+.project-tab > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--project-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--project-accent), transparent 84%);
+}
+
+.project-tab > em {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: rgba(110, 103, 112, 0.09);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.project-tab:hover,
+.new-project-tab:hover { color: var(--ink); background: rgba(255, 255, 255, 0.68); }
+
+.project-tab.active {
+  border-color: color-mix(in srgb, var(--project-accent), transparent 58%);
+  color: var(--ink);
+  background: var(--card);
+  box-shadow: 0 5px 16px rgba(53, 46, 48, 0.07), inset 0 -2px 0 var(--project-accent);
+}
+
+.new-project-tab {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+
 .mobile-brand { display: none; }
 
 .search-wrap {
@@ -693,8 +778,9 @@ select:focus-visible {
   border-radius: 13px;
   background: var(--card);
   box-shadow: var(--shadow-card);
-  cursor: pointer;
+  cursor: grab;
   touch-action: manipulation;
+  user-select: none;
   transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }
 
@@ -704,6 +790,8 @@ select:focus-visible {
 }
 
 .task-card.is-dragging { opacity: 0.35; }
+.task-card:active { cursor: grabbing; }
+.task-card:focus-visible { outline: 2px solid rgba(118, 93, 212, 0.48); outline-offset: 2px; }
 .card-ghost { width: 270px; transform: rotate(2deg); opacity: 0.96; box-shadow: 0 20px 44px rgba(48, 40, 37, 0.19); }
 
 .card-topline {
@@ -734,28 +822,14 @@ select:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--label-color), transparent 82%);
 }
 
-.drag-handle {
-  width: 24px;
-  height: 23px;
-  margin: -4px -6px 0 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  place-items: center;
-  color: #aaa4a7;
-  background: transparent;
-  cursor: grab;
-  touch-action: none;
-}
-
-.drag-handle:active { cursor: grabbing; }
-
 .task-card h3 {
   margin: 9px 0 0;
   font-size: 12px;
   line-height: 1.42;
   letter-spacing: -0.015em;
 }
+
+.task-card > h3:first-child { margin-top: 0; }
 
 .task-card p {
   display: -webkit-box;
@@ -910,6 +984,8 @@ select:focus-visible {
 }
 
 .column-editor { width: min(470px, 100%); }
+.project-editor { width: min(460px, 100%); }
+.project-editor-note { margin: -4px 0 20px; color: var(--muted); font-size: 10px; line-height: 1.55; }
 
 .modal-heading,
 .customizer-header {
@@ -1106,6 +1182,7 @@ select:focus-visible {
 .customizer-tip strong { color: var(--ink); font-size: 11px; }
 .customizer-tip p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .full-button { width: 100%; margin-top: 24px; }
+.danger-button.full-button + .primary-button.full-button { margin-top: 10px; }
 
 .auth-screen {
   min-height: 100dvh;
@@ -1339,6 +1416,10 @@ select:focus-visible {
   .sidebar { display: none; }
   .workspace { height: 100dvh; }
   .topbar { min-height: 61px; padding: 0 16px; gap: 12px; }
+  .project-tabs-bar { min-height: 53px; padding: 7px 14px; gap: 0; }
+  .project-tabs-label { display: none; }
+  .project-tab,
+  .new-project-tab { min-height: 35px; padding-inline: 11px; }
   .mobile-brand { display: flex; }
   .mobile-brand .brand-mark { width: 31px; height: 31px; padding: 7px 6px; }
   .mobile-brand strong { display: none; }

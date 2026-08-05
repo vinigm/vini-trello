@@ -87,10 +87,16 @@ type ColumnItem = {
 };
 
 type BoardState = {
+  id: string;
   title: string;
   theme: Theme;
   columns: ColumnItem[];
   cards: CardItem[];
+};
+
+type WorkspaceState = {
+  activeBoardId: string;
+  boards: BoardState[];
 };
 
 type SaveStatus = "loading" | "saving" | "saved" | "offline";
@@ -99,7 +105,8 @@ const LABEL_COLORS = ["#f26b5f", "#f4a340", "#8d79e8", "#38a88f", "#4d8fd9"];
 const COLUMN_COLORS = ["#f47768", "#9b87ef", "#f3b94f", "#4fbea6", "#5f9fe6", "#ef85b2"];
 
 const DEFAULT_BOARD: BoardState = {
-  title: "Meu espaço",
+  id: "pessoal",
+  title: "Pessoal",
   theme: "peach",
   columns: [
     {
@@ -197,12 +204,67 @@ const DEFAULT_BOARD: BoardState = {
   ],
 };
 
+function createBlankBoard(id: string, title: string, theme: Theme): BoardState {
+  return {
+    id,
+    title,
+    theme,
+    columns: [
+      { id: `${id}-inbox`, title: "Caixa de entrada", color: "#f47768", cardIds: [] },
+      { id: `${id}-week`, title: "Esta semana", color: "#9b87ef", cardIds: [] },
+      { id: `${id}-doing`, title: "Em andamento", color: "#f3b94f", cardIds: [] },
+      { id: `${id}-done`, title: "Concluído", color: "#4fbea6", cardIds: [] },
+    ],
+    cards: [],
+  };
+}
+
+const DEFAULT_WORKSPACE: WorkspaceState = {
+  activeBoardId: DEFAULT_BOARD.id,
+  boards: [
+    DEFAULT_BOARD,
+    createBlankBoard("italia", "Itália", "ocean"),
+    createBlankBoard("panvel", "Panvel", "lilac"),
+    createBlankBoard("mestrado", "Mestrado", "midnight"),
+  ],
+};
+
+function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
+  if (payload?.workspace?.boards?.length) {
+    const hasActiveBoard = payload.workspace.boards.some((board) => board.id === payload.workspace!.activeBoardId);
+    return hasActiveBoard
+      ? payload.workspace
+      : { ...payload.workspace, activeBoardId: payload.workspace.boards[0].id };
+  }
+
+  if (payload?.state) {
+    const legacyBoard: BoardState = {
+      ...payload.state,
+      id: "pessoal",
+      title: payload.state.title === "Meu espaço" ? "Pessoal" : payload.state.title,
+    };
+    return {
+      activeBoardId: legacyBoard.id,
+      boards: [legacyBoard, ...DEFAULT_WORKSPACE.boards.slice(1)],
+    };
+  }
+
+  return DEFAULT_WORKSPACE;
+}
+
 const THEME_OPTIONS: { id: Theme; name: string; colors: string[] }[] = [
   { id: "peach", name: "Pêssego", colors: ["#f8eee8", "#f3b5a4"] },
   { id: "lilac", name: "Lavanda", colors: ["#efecf8", "#b9aceb"] },
   { id: "ocean", name: "Oceano", colors: ["#e7f2f4", "#8ac6c7"] },
   { id: "midnight", name: "Noturno", colors: ["#252739", "#9b87ef"] },
 ];
+
+const THEME_ACCENTS: Record<Theme, string> = {
+  peach: "#ef705f",
+  lilac: "#8d79e8",
+  ocean: "#38a88f",
+  midnight: "#6f7fe8",
+};
 
 const PRIORITY_LABELS: Record<Priority, string> = {
   low: "Baixa",
@@ -254,6 +316,8 @@ function SortableCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id, data: { type: "card" } });
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const pointerMoved = useRef(false);
 
   const style: CSSProperties = {
     transform: DndCSS.Transform.toString(transform),
@@ -265,34 +329,45 @@ function SortableCard({
       ref={setNodeRef}
       style={style}
       className={`task-card ${isDragging ? "is-dragging" : ""}`}
+      {...attributes}
+      {...listeners}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen(card.id)}
-      onKeyDown={(event) => {
-        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          onOpen(card.id);
+      aria-label={`${card.title}. Clique para editar ou arraste para mover.`}
+      onPointerDownCapture={(event) => {
+        pointerStart.current = { x: event.clientX, y: event.clientY };
+        pointerMoved.current = false;
+      }}
+      onPointerMoveCapture={(event) => {
+        const start = pointerStart.current;
+        if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) {
+          pointerMoved.current = true;
         }
       }}
+      onClick={() => {
+        pointerStart.current = null;
+        if (pointerMoved.current) return;
+        onOpen(card.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onOpen(card.id);
+          return;
+        }
+        listeners?.onKeyDown?.(event);
+      }}
     >
-      <div className="card-topline">
-        <span
-          className="card-label"
-          style={{ "--label-color": card.labelColor } as CSSProperties}
-        >
-          {card.label || "Sem etiqueta"}
-        </span>
-        <button
-          type="button"
-          className="drag-handle"
-          aria-label={`Arrastar ${card.title}`}
-          onClick={(event) => event.stopPropagation()}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical size={16} />
-        </button>
-      </div>
+      {card.label && (
+        <div className="card-topline">
+          <span
+            className="card-label"
+            style={{ "--label-color": card.labelColor } as CSSProperties}
+          >
+            {card.label}
+          </span>
+        </div>
+      )}
       <h3>{card.title}</h3>
       {card.description && <p>{card.description}</p>}
       <div className="card-meta">
@@ -319,12 +394,7 @@ function SortableCard({
 function CardGhost({ card }: { card: CardItem }) {
   return (
     <article className="task-card card-ghost">
-      <span
-        className="card-label"
-        style={{ "--label-color": card.labelColor } as CSSProperties}
-      >
-        {card.label || "Sem etiqueta"}
-      </span>
+      {card.label && <span className="card-label" style={{ "--label-color": card.labelColor } as CSSProperties}>{card.label}</span>}
       <h3>{card.title}</h3>
     </article>
   );
@@ -583,8 +653,43 @@ function ColumnModal({
   );
 }
 
+function ProjectModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (title: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+
+  return (
+    <div className="modal-backdrop">
+      <button type="button" className="backdrop-dismiss" aria-label="Fechar novo projeto" onClick={onClose} />
+      <section className="modal-card project-editor" role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
+        <div className="modal-heading">
+          <div className="modal-icon"><LayoutDashboard size={19} /></div>
+          <div><span>Novo desktop</span><h2 id="project-modal-title">Criar um projeto</h2></div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}><X size={20} /></button>
+        </div>
+        <form onSubmit={(event) => { event.preventDefault(); if (title.trim()) onSave(title.trim()); }}>
+          <label className="field full-field">
+            <span>Nome do projeto</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Casa, Viagem ou Trabalho" required />
+          </label>
+          <p className="project-editor-note">O novo projeto começa com quatro colunas vazias e fica totalmente separado dos outros.</p>
+          <div className="modal-actions">
+            <span className="modal-spacer" />
+            <button type="button" className="text-button" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="primary-button">Criar projeto</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 export default function Home() {
-  const [board, setBoard] = useState<BoardState>(DEFAULT_BOARD);
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(DEFAULT_WORKSPACE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("loading");
   const [loaded, setLoaded] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -598,7 +703,19 @@ export default function Home() {
   const [columnModal, setColumnModal] = useState<{ mode: "new" | "edit"; columnId?: string } | null>(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showProjectModal, setShowProjectModal] = useState(false);
   const saveRequest = useRef(0);
+  const board = workspaceState.boards.find((candidate) => candidate.id === workspaceState.activeBoardId)
+    ?? workspaceState.boards[0];
+
+  function setBoard(update: (current: BoardState) => BoardState) {
+    setWorkspaceState((current) => ({
+      ...current,
+      boards: current.boards.map((candidate) =>
+        candidate.id === current.activeBoardId ? update(candidate) : candidate,
+      ),
+    }));
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
@@ -621,8 +738,8 @@ export default function Home() {
     async function loadBoard() {
       try {
         const snapshot = await getDoc(doc(db, "users", user!.uid, "boards", "main"));
-        const payload = snapshot.data() as { state?: BoardState } | undefined;
-        if (active && payload?.state) setBoard(payload.state);
+        const payload = snapshot.data() as { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> } | undefined;
+        if (active) setWorkspaceState(getWorkspaceFromPayload(payload));
         if (active) setSaveStatus("saved");
       } catch {
         if (active) setSaveStatus("offline");
@@ -642,7 +759,7 @@ export default function Home() {
       try {
         await setDoc(
           doc(db, "users", user.uid, "boards", "main"),
-          { state: board, updatedAt: serverTimestamp() },
+          { workspace: workspaceState, updatedAt: serverTimestamp() },
           { merge: true },
         );
         if (saveRequest.current === requestNumber) setSaveStatus("saved");
@@ -651,7 +768,7 @@ export default function Home() {
       }
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [board, loaded, user]);
+  }, [loaded, user, workspaceState]);
 
   async function handleSignIn() {
     setAuthBusy(true);
@@ -668,8 +785,44 @@ export default function Home() {
 
   async function handleSignOut() {
     await signOut(auth);
-    setBoard(DEFAULT_BOARD);
+    setWorkspaceState(DEFAULT_WORKSPACE);
     setSaveStatus("loading");
+  }
+
+  function selectProject(projectId: string) {
+    setWorkspaceState((current) => ({ ...current, activeBoardId: projectId }));
+    setQuery("");
+    setPriorityFilter("all");
+    setCardModal(null);
+    setColumnModal(null);
+    setShowFilters(false);
+  }
+
+  function createProject(title: string) {
+    const projectId = makeId("project");
+    const themes: Theme[] = ["peach", "ocean", "lilac", "midnight"];
+    setWorkspaceState((current) => ({
+      activeBoardId: projectId,
+      boards: [
+        ...current.boards,
+        createBlankBoard(projectId, title, themes[current.boards.length % themes.length]),
+      ],
+    }));
+    setShowProjectModal(false);
+    setQuery("");
+    setPriorityFilter("all");
+  }
+
+  function deleteProject() {
+    if (workspaceState.boards.length <= 1) return;
+    if (!window.confirm(`Excluir o projeto “${board.title}” e todos os cartões dele?`)) return;
+    setWorkspaceState((current) => {
+      const remaining = current.boards.filter((candidate) => candidate.id !== current.activeBoardId);
+      return { activeBoardId: remaining[0].id, boards: remaining };
+    });
+    setShowCustomizer(false);
+    setQuery("");
+    setPriorityFilter("all");
   }
 
   const filteredCards = useMemo(() => {
@@ -898,9 +1051,33 @@ export default function Home() {
           </div>
         </header>
 
+        <nav className="project-tabs-bar" aria-label="Projetos">
+          <span className="project-tabs-label">Desktops</span>
+          <div className="project-tabs-scroll" role="tablist" aria-label="Alternar projeto">
+            {workspaceState.boards.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                role="tab"
+                aria-selected={project.id === board.id}
+                className={`project-tab ${project.id === board.id ? "active" : ""}`}
+                style={{ "--project-accent": THEME_ACCENTS[project.theme] } as CSSProperties}
+                onClick={() => selectProject(project.id)}
+              >
+                <i aria-hidden="true" />
+                <span>{project.title}</span>
+                <em>{project.cards.length}</em>
+              </button>
+            ))}
+            <button type="button" className="new-project-tab" onClick={() => setShowProjectModal(true)}>
+              <Plus size={15} /> Novo projeto
+            </button>
+          </div>
+        </nav>
+
         <div className="board-toolbar">
           <div className="board-heading">
-            <span className="eyebrow">Quadro pessoal <i /></span>
+            <span className="eyebrow">Projeto independente <i /></span>
             <h1>{board.title}</h1>
             <p>Organize suas ideias, escolha prioridades e siga no seu ritmo.</p>
           </div>
@@ -935,8 +1112,12 @@ export default function Home() {
           <DragOverlay>{activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
         </DndContext>
 
-        <footer className="board-footer"><span><GripVertical size={14} /> Arraste os cartões para reorganizar</span><span>{board.columns.length} colunas · {totalCards} cartões</span></footer>
+        <footer className="board-footer"><span><GripVertical size={14} /> Clique para editar · segure e arraste para mover</span><span>{board.columns.length} colunas · {totalCards} cartões</span></footer>
       </section>
+
+      {showProjectModal && (
+        <ProjectModal onClose={() => setShowProjectModal(false)} onSave={createProject} />
+      )}
 
       {cardModal && (
         <CardModal
@@ -967,13 +1148,14 @@ export default function Home() {
           <button type="button" className="backdrop-dismiss" aria-label="Fechar personalização" onClick={() => setShowCustomizer(false)} />
           <aside className="customizer-panel" role="dialog" aria-modal="true" aria-labelledby="customizer-title">
             <div className="customizer-header"><div><span>Seu espaço, suas regras</span><h2 id="customizer-title">Personalizar quadro</h2></div><button type="button" className="icon-button" aria-label="Fechar" onClick={() => setShowCustomizer(false)}><X size={20} /></button></div>
-            <label className="field full-field"><span>Nome do quadro</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
+            <label className="field full-field"><span>Nome do projeto</span><input value={board.title} onChange={(event) => setBoard((current) => ({ ...current, title: event.target.value }))} /></label>
             <div className="theme-section"><span>Tema do fundo</span><div className="theme-grid">{THEME_OPTIONS.map((theme) => (
               <button key={theme.id} type="button" className={`theme-option ${board.theme === theme.id ? "selected" : ""}`} onClick={() => setBoard((current) => ({ ...current, theme: theme.id }))}>
                 <span className="theme-preview" style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})` }}>{board.theme === theme.id && <Check size={18} />}</span><strong>{theme.name}</strong>
               </button>
             ))}</div></div>
             <div className="customizer-tip"><Sparkles size={20} /><div><strong>Dica de organização</strong><p>Clique nos três pontos de cada coluna para trocar seu nome e sua cor.</p></div></div>
+            {workspaceState.boards.length > 1 && <button type="button" className="danger-button full-button" onClick={deleteProject}><Trash2 size={16} /> Excluir este projeto</button>}
             <button type="button" className="primary-button full-button" onClick={() => setShowCustomizer(false)}>Pronto</button>
           </aside>
         </div>

@@ -5,7 +5,8 @@ Um quadro Kanban pessoal, responsivo e colorido para organizar ideias, prioridad
 ## O que já funciona
 
 - cartões editáveis com etiqueta, prioridade, prazo, descrição e checklist;
-- arrastar e soltar cartões entre colunas;
+- desktops independentes para separar projetos como Pessoal, Itália, Panvel e Mestrado;
+- arrastar e soltar o cartão inteiro entre colunas;
 - criação, edição e exclusão de cartões e colunas;
 - busca e filtro por prioridade;
 - quatro temas visuais e cores personalizáveis;
