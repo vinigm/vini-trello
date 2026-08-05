@@ -1318,6 +1318,13 @@ select:focus-visible {
 .planning-subnav button:hover { color: #25282d; background: rgba(50, 51, 54, 0.06); }
 .planning-subnav button.active { color: #fff; background: #354764; }
 
+.planning-week .planning-subnav {
+  min-height: 36px;
+  padding-block: 3px;
+}
+
+.planning-week .planning-subnav button { min-height: 28px; }
+
 .planner-header {
   padding: 18px 22px 14px;
   display: flex;
@@ -1335,8 +1342,23 @@ select:focus-visible {
 .planner-navigation button + button { border-left: 1px solid rgba(50, 51, 54, 0.14); }
 .planner-navigation button:hover { background: #fff; }
 
+.planning-week .planner-header {
+  min-height: 44px;
+  padding: 6px 12px;
+  align-items: center;
+}
+
+.planning-week .planner-header > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.planning-week .planner-header h1 { font-size: 20px; }
+.planning-week .planner-navigation button { height: 28px; }
+
 .week-planner {
-  padding: 0 22px 22px;
+  padding: 0 12px 7px;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1349,7 +1371,8 @@ select:focus-visible {
   border: 1px solid rgba(50, 51, 54, 0.28);
   border-radius: 7px;
   flex: 1;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: rgba(255, 255, 255, 0.7);
   box-shadow: 0 8px 24px rgba(62, 57, 48, 0.055);
   scrollbar-width: thin;
@@ -1358,8 +1381,12 @@ select:focus-visible {
 
 .week-schedule-grid {
   min-width: 990px;
+  width: 100%;
+  height: 100%;
   display: grid;
   grid-template-columns: 64px repeat(7, minmax(128px, 1fr));
+  grid-template-rows: 28px repeat(35, minmax(10px, 20px));
+  align-content: start;
   color: #31343a;
 }
 
@@ -1367,7 +1394,7 @@ select:focus-visible {
 
 .week-schedule-corner,
 .week-schedule-day {
-  min-height: 48px;
+  min-height: 0;
   position: sticky;
   top: 0;
   z-index: 4;
@@ -1378,7 +1405,7 @@ select:focus-visible {
 .week-schedule-corner {
   left: 0;
   z-index: 6;
-  padding-top: 18px;
+  padding-top: 8px;
   color: #85817a;
   font-size: 9px;
   font-weight: 800;
@@ -1387,7 +1414,7 @@ select:focus-visible {
 }
 
 .week-schedule-day {
-  padding: 7px 9px;
+  padding: 2px 7px;
   border-left: 1px solid rgba(50, 51, 54, 0.2);
   display: flex;
   align-items: center;
@@ -1395,13 +1422,13 @@ select:focus-visible {
   gap: 8px;
 }
 
-.week-schedule-day strong { font-size: 13px; }
-.week-schedule-day span { color: #797b80; font-size: 10px; }
+.week-schedule-day strong { font-size: 10px; }
+.week-schedule-day span { color: #797b80; font-size: 8px; }
 .week-schedule-day.is-today { color: #2f5279; background: #e7eef5; }
 
 .week-time-label,
 .week-slot {
-  min-height: 42px;
+  min-height: 0;
   border-bottom: 1px solid rgba(50, 51, 54, 0.11);
 }
 
@@ -1414,7 +1441,7 @@ select:focus-visible {
   place-items: center;
   color: #8a8780;
   background: #f8f6f0;
-  font-size: 13px;
+  font-size: 9px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1422,7 +1449,7 @@ select:focus-visible {
 
 .week-slot {
   min-width: 0;
-  padding: 3px;
+  padding: 1px 2px;
   border-left: 1px solid rgba(50, 51, 54, 0.13);
   background: rgba(255, 255, 255, 0.34);
   transition: background 120ms ease;
@@ -1435,11 +1462,11 @@ select:focus-visible {
 
 .week-slot-card {
   width: 100%;
-  height: 35px;
+  height: 100%;
   min-width: 0;
   position: relative;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 3px;
   background: transparent;
 }
 
@@ -1457,13 +1484,13 @@ select:focus-visible {
   width: 100%;
   height: 100%;
   min-width: 0;
-  padding: 0 62px 0 7px;
+  padding: 0 42px 0 5px;
   border: 0;
   border-radius: inherit;
   outline: 0;
   color: #31343a;
   background: transparent;
-  font-size: 11px;
+  font-size: 9px;
   text-overflow: ellipsis;
 }
 
@@ -1475,7 +1502,7 @@ select:focus-visible {
   inset: 0 2px 0 auto;
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 0;
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -1487,11 +1514,11 @@ select:focus-visible {
 .week-card-drag,
 .week-card-select,
 .week-card-color {
-  width: 18px;
-  height: 25px;
+  width: 13px;
+  height: calc(100% - 2px);
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 2px;
   display: grid;
   place-items: center;
   color: #606873;
@@ -1503,7 +1530,7 @@ select:focus-visible {
 .week-card-drag { cursor: grab; touch-action: none; }
 .week-card-drag:active { cursor: grabbing; }
 .week-card-color { position: relative; cursor: pointer; overflow: hidden; }
-.week-card-color > span { width: 10px; height: 10px; border: 1px solid rgba(38, 42, 48, 0.26); border-radius: 50%; }
+.week-card-color > span { width: 7px; height: 7px; border: 1px solid rgba(38, 42, 48, 0.26); border-radius: 50%; }
 .week-card-color input { width: 1px; height: 1px; position: absolute; opacity: 0; pointer-events: none; }
 
 .week-bulk-actions {
@@ -1528,9 +1555,7 @@ select:focus-visible {
 .week-bulk-actions > button:hover { background: #e4e9ee; }
 
 .week-schedule-help {
-  margin: 8px 2px 0;
-  color: #77746d;
-  font-size: 10px;
+  display: none;
 }
 
 .month-planner {
@@ -2262,12 +2287,11 @@ select:focus-visible {
   .planner-header { padding: 14px 12px 12px; align-items: center; }
   .planner-header h1 { font-size: 22px; }
   .planner-header > div:first-child span { display: none; }
-  .week-planner { padding: 0 8px 16px; }
-  .week-schedule-scroll { max-height: calc(100dvh - 172px); border-radius: 5px; }
+  .week-planner { padding: 0 6px 6px; }
+  .week-schedule-scroll { max-height: none; border-radius: 5px; }
   .week-schedule-grid { min-width: 930px; grid-template-columns: 52px repeat(7, 125px); }
   .week-schedule-corner { font-size: 8px; }
-  .week-time-label { padding: 0; font-size: 12px; }
-  .week-schedule-help { padding-inline: 3px; line-height: 1.45; }
+  .week-time-label { padding: 0; font-size: 9px; }
   .week-bulk-actions { flex-wrap: wrap; gap: 5px; }
   .week-bulk-actions > span { display: none; }
   .week-bulk-actions strong { margin-right: auto; }
