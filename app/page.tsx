@@ -35,18 +35,14 @@ import {
   Bell,
   CalendarDays,
   Check,
-  Circle,
   Cloud,
   CloudOff,
   Columns3,
-  GripVertical,
   LayoutDashboard,
   ListFilter,
   LoaderCircle,
   LogIn,
-  LogOut,
   MoreHorizontal,
-  Palette,
   Plus,
   Search,
   SlidersHorizontal,
@@ -290,23 +286,6 @@ function findColumnForCard(board: BoardState, cardId: string) {
   return board.columns.find((column) => column.cardIds.includes(cardId));
 }
 
-function formatDueDate(value: string) {
-  if (!value) return "Sem data";
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  })
-    .format(new Date(`${value}T12:00:00`))
-    .replace(".", "");
-}
-
-function isOverdue(value: string) {
-  if (!value) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(`${value}T00:00:00`).getTime() < today.getTime();
-}
-
 function SortableCard({
   card,
   onOpen,
@@ -358,35 +337,7 @@ function SortableCard({
         listeners?.onKeyDown?.(event);
       }}
     >
-      {card.label && (
-        <div className="card-topline">
-          <span
-            className="card-label"
-            style={{ "--label-color": card.labelColor } as CSSProperties}
-          >
-            {card.label}
-          </span>
-        </div>
-      )}
       <h3>{card.title}</h3>
-      {card.description && <p>{card.description}</p>}
-      <div className="card-meta">
-        {card.dueDate && (
-          <span className={isOverdue(card.dueDate) ? "date-overdue" : ""}>
-            <CalendarDays size={14} />
-            {formatDueDate(card.dueDate)}
-          </span>
-        )}
-        {card.checklistTotal > 0 && (
-          <span className={card.checklistDone === card.checklistTotal ? "check-done" : ""}>
-            <Check size={14} />
-            {card.checklistDone}/{card.checklistTotal}
-          </span>
-        )}
-        <span className={`priority-dot priority-${card.priority}`} title={`Prioridade ${PRIORITY_LABELS[card.priority]}`}>
-          <Circle size={9} fill="currentColor" />
-        </span>
-      </div>
     </div>
   );
 }
@@ -394,7 +345,6 @@ function SortableCard({
 function CardGhost({ card }: { card: CardItem }) {
   return (
     <article className="task-card card-ghost">
-      {card.label && <span className="card-label" style={{ "--label-color": card.labelColor } as CSSProperties}>{card.label}</span>}
       <h3>{card.title}</h3>
     </article>
   );
@@ -838,9 +788,6 @@ export default function Home() {
   const activeCard = board.cards.find((card) => card.id === activeCardId);
   const modalCard = cardModal?.cardId ? board.cards.find((card) => card.id === cardModal.cardId) : undefined;
   const modalColumn = columnModal?.columnId ? board.columns.find((column) => column.id === columnModal.columnId) : undefined;
-  const totalCards = board.cards.length;
-  const doneColumn = board.columns.find((column) => column.title.toLocaleLowerCase("pt-BR").includes("conclu"));
-  const doneCount = doneColumn?.cardIds.length ?? 0;
 
   function handleDragStart(event: DragStartEvent) {
     setActiveCardId(String(event.active.id));
@@ -999,40 +946,17 @@ export default function Home() {
   }
 
   const initials = getInitials(user);
-  const displayName = user.displayName?.split(" ")[0] || "Vinicius";
 
   return (
     <main className={`app-shell theme-${board.theme}`}>
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
-          <div><strong>vinello</strong><span>organize do seu jeito</span></div>
-        </div>
-
-        <nav className="main-nav" aria-label="Navegação principal">
-          <button type="button" className="nav-item active"><LayoutDashboard size={19} /><span>Meu quadro</span></button>
-          <button type="button" className="nav-item" onClick={() => setQuery("")}><CalendarDays size={19} /><span>Planejamento</span></button>
-          <button type="button" className="nav-item" onClick={() => setPriorityFilter("high")}><Sparkles size={19} /><span>Foco</span><em>{board.cards.filter((card) => card.priority === "high").length}</em></button>
-        </nav>
-
-        <div className="sidebar-section">
-          <span className="section-label">Visão geral</span>
-          <div className="mini-progress">
-            <div><span>Progresso</span><strong>{totalCards ? Math.round((doneCount / totalCards) * 100) : 0}%</strong></div>
-            <div className="progress-track"><span style={{ width: `${totalCards ? (doneCount / totalCards) * 100 : 0}%` }} /></div>
-            <p>{doneCount} de {totalCards} cartões concluídos</p>
-          </div>
-        </div>
-
-        <div className="sidebar-bottom">
-          <button type="button" className="nav-item" onClick={() => setShowCustomizer(true)}><Palette size={19} /><span>Personalizar</span></button>
-          <button type="button" className="profile-row" onClick={handleSignOut} title="Sair da conta"><div className="avatar">{initials}</div><div><strong>{displayName}</strong><span>{user.email}</span></div><LogOut size={16} /></button>
-        </div>
-      </aside>
-
       <section className="workspace">
         <header className="topbar">
-          <div className="mobile-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>vinello</strong></div>
+          <div className="topbar-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>vinello</strong></div>
+          <nav className="top-nav" aria-label="Navegação principal">
+            <button type="button" className="top-nav-item active"><LayoutDashboard size={17} /><span>Quadro</span></button>
+            <button type="button" className="top-nav-item" onClick={() => { setQuery(""); setPriorityFilter("all"); }}><CalendarDays size={17} /><span>Planejamento</span></button>
+            <button type="button" className="top-nav-item" onClick={() => setPriorityFilter("high")}><Sparkles size={17} /><span>Foco</span><em>{board.cards.filter((card) => card.priority === "high").length}</em></button>
+          </nav>
           <div className="search-wrap">
             <Search size={18} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cartões…" aria-label="Buscar cartões" />
@@ -1052,7 +976,6 @@ export default function Home() {
         </header>
 
         <nav className="project-tabs-bar" aria-label="Projetos">
-          <span className="project-tabs-label">Desktops</span>
           <div className="project-tabs-scroll" role="tablist" aria-label="Alternar projeto">
             {workspaceState.boards.map((project) => (
               <button
@@ -1070,7 +993,7 @@ export default function Home() {
               </button>
             ))}
             <button type="button" className="new-project-tab" onClick={() => setShowProjectModal(true)}>
-              <Plus size={15} /> Novo projeto
+              <Plus size={15} /><span>Novo projeto</span>
             </button>
           </div>
         </nav>
@@ -1112,7 +1035,6 @@ export default function Home() {
           <DragOverlay>{activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
         </DndContext>
 
-        <footer className="board-footer"><span><GripVertical size={14} /> Clique para editar · segure e arraste para mover</span><span>{board.columns.length} colunas · {totalCards} cartões</span></footer>
       </section>
 
       {showProjectModal && (
