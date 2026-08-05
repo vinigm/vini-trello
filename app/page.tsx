@@ -1119,32 +1119,38 @@ function DiaryWorkspace({
       </section>
 
       <div className="diary-feed" aria-label="Postagens do diário">
-        {[...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((post) => (
-          <article key={post.id} className="diary-post">
-            <header>
-              <div>
-                <time dateTime={post.createdAt}>{formatDiaryPostDate(post.createdAt)}</time>
-                {post.updatedAt && <small>editado {formatActivityDate(post.updatedAt)}</small>}
-              </div>
-              <div className="diary-post-actions">
-                <button type="button" aria-label="Editar postagem" title="Editar postagem" onClick={() => startEditing(post)}><Pencil size={14} /></button>
-                <button type="button" aria-label="Excluir postagem" title="Excluir postagem" onClick={() => { if (window.confirm("Excluir esta postagem do diário?")) onDelete(post.id); }}><Trash2 size={14} /></button>
-              </div>
-            </header>
-
-            {editingId === post.id ? (
-              <div className="diary-post-editor">
-                <RichTextEditor value={editingContent} onChange={setEditingContent} ariaLabel="Editar postagem do diário" placeholder="Atualize sua postagem…" />
-                <div className="diary-post-editor-actions">
-                  <button type="button" className="text-button" onClick={() => { setEditingId(null); setEditingContent(""); }}>Cancelar</button>
-                  <button type="button" className="primary-button" disabled={!hasRichText(editingContent)} onClick={saveEditing}>Salvar alterações</button>
+        {[...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((post) => {
+          const postDate = formatDiaryPostDate(post.createdAt);
+          return (
+            <article key={post.id} className="diary-post">
+              <header>
+                <div className="diary-post-meta">
+                  <time dateTime={post.createdAt}>
+                    <span className="diary-post-date-label">{postDate.date}</span>
+                    {postDate.weekday && <span className="diary-post-weekday">{postDate.weekday}</span>}
+                  </time>
+                  {post.updatedAt && <small>editado {formatActivityDate(post.updatedAt)}</small>}
                 </div>
-              </div>
-            ) : (
-              <div className="diary-post-content" dangerouslySetInnerHTML={{ __html: post.content }} />
-            )}
-          </article>
-        ))}
+                <div className="diary-post-actions">
+                  <button type="button" aria-label="Editar postagem" title="Editar postagem" onClick={() => startEditing(post)}><Pencil size={14} /></button>
+                  <button type="button" aria-label="Excluir postagem" title="Excluir postagem" onClick={() => { if (window.confirm("Excluir esta postagem do diário?")) onDelete(post.id); }}><Trash2 size={14} /></button>
+                </div>
+              </header>
+
+              {editingId === post.id ? (
+                <div className="diary-post-editor">
+                  <RichTextEditor value={editingContent} onChange={setEditingContent} ariaLabel="Editar postagem do diário" placeholder="Atualize sua postagem…" />
+                  <div className="diary-post-editor-actions">
+                    <button type="button" className="text-button" onClick={() => { setEditingId(null); setEditingContent(""); }}>Cancelar</button>
+                    <button type="button" className="primary-button" disabled={!hasRichText(editingContent)} onClick={saveEditing}>Salvar alterações</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="diary-post-content" dangerouslySetInnerHTML={{ __html: post.content }} />
+              )}
+            </article>
+          );
+        })}
         {!posts.length && (
           <div className="diary-empty">
             <FileText size={21} />
@@ -1165,15 +1171,19 @@ function formatActivityDate(value: string) {
 
 function formatDiaryPostDate(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Agora";
-  return new Intl.DateTimeFormat("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return { date: "Agora", weekday: "" };
+
+  const capitalize = (text: string) => text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1);
+  const day = new Intl.DateTimeFormat("pt-BR", { day: "2-digit" }).format(date);
+  const month = capitalize(new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(date));
+  const year = new Intl.DateTimeFormat("pt-BR", { year: "numeric" }).format(date);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(date)
+    .split("-")
+    .map(capitalize)
+    .join(" ");
+
+  return { date: `${day} de ${month} de ${year}`, weekday };
 }
 
 function CardModal({
