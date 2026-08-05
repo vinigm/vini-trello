@@ -517,34 +517,15 @@ function hasCardDescription(description: string) {
 function SortableCard({
   card,
   onOpen,
-  onRename,
 }: {
   card: CardItem;
   onOpen: (id: string) => void;
-  onRename: (id: string, title: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(card.title);
-  const titleInputRef = useRef<HTMLInputElement>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id, data: { type: "card" }, disabled: editing });
+    useSortable({ id: card.id, data: { type: "card" } });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const pointerMoved = useRef(false);
   const hasDescription = hasCardDescription(card.description);
-
-  useEffect(() => {
-    if (editing) {
-      titleInputRef.current?.focus();
-      titleInputRef.current?.select();
-    }
-  }, [editing]);
-
-  function finishInlineEdit() {
-    const nextTitle = title.trim();
-    if (nextTitle && nextTitle !== card.title) onRename(card.id, nextTitle);
-    if (!nextTitle) setTitle(card.title);
-    setEditing(false);
-  }
 
   const style: CSSProperties = {
     transform: DndCSS.Transform.toString(transform),
@@ -560,7 +541,7 @@ function SortableCard({
       {...listeners}
       role="button"
       tabIndex={0}
-      aria-label={`${card.title}. Clique para editar o título ou arraste para mover.`}
+      aria-label={`${card.title}. Clique para abrir os detalhes ou arraste para mover.`}
       onPointerDownCapture={(event) => {
         pointerStart.current = { x: event.clientX, y: event.clientY };
         pointerMoved.current = false;
@@ -573,37 +554,19 @@ function SortableCard({
       }}
       onClick={() => {
         pointerStart.current = null;
-        if (pointerMoved.current || editing) return;
-        setTitle(card.title);
-        setEditing(true);
+        if (pointerMoved.current) return;
+        onOpen(card.id);
       }}
       onKeyDown={(event) => {
-        if (!editing && event.key === "Enter") {
+        if (event.key === "Enter") {
           event.preventDefault();
-          setTitle(card.title);
-          setEditing(true);
+          onOpen(card.id);
           return;
         }
         listeners?.onKeyDown?.(event);
       }}
     >
-      {editing ? (
-        <input
-          ref={titleInputRef}
-          className="card-inline-title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          onBlur={finishInlineEdit}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-            if (event.key === "Enter") { event.preventDefault(); finishInlineEdit(); }
-            if (event.key === "Escape") { event.preventDefault(); setTitle(card.title); setEditing(false); }
-          }}
-          aria-label="Editar título do cartão"
-        />
-      ) : <h3>{card.title}</h3>}
+      <h3>{card.title}</h3>
       {hasDescription && (
         <span className="card-description-indicator" title="Este cartão possui descrição" aria-label="Possui descrição">
           <FileText size={12} />
@@ -639,14 +602,12 @@ function BoardColumn({
   cards,
   onAdd,
   onOpenCard,
-  onRenameCard,
   onEditColumn,
 }: {
   column: ColumnItem;
   cards: CardItem[];
   onAdd: (columnId: string) => void;
   onOpenCard: (id: string) => void;
-  onRenameCard: (id: string, title: string) => void;
   onEditColumn: (columnId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `column-${column.id}` });
@@ -676,7 +637,7 @@ function BoardColumn({
       <div className="card-list">
         <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
-            <SortableCard key={card.id} card={card} onOpen={onOpenCard} onRename={onRenameCard} />
+            <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
           ))}
         </SortableContext>
         {cards.length === 0 && (
@@ -1783,13 +1744,6 @@ export default function Home() {
     }, boardId);
   }
 
-  function renameCard(boardId: string, cardId: string, title: string) {
-    setBoard((current) => ({
-      ...current,
-      cards: current.cards.map((card) => card.id === cardId ? { ...card, title } : card),
-    }), boardId);
-  }
-
   function saveCard(draft: CardDraft) {
     if (!cardModal) return;
     const boardId = cardModal.boardId;
@@ -1949,7 +1903,7 @@ export default function Home() {
                   <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
                     {project.columns.map((column) => {
                       const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
-                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onRenameCard={(cardId, title) => renameCard(project.id, cardId, title)} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
+                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
                     })}
                     <button type="button" className="add-column-button" aria-label={`Adicionar lista ao desktop ${project.title}`} title="Adicionar outra lista" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><Plus size={18} /></button>
                   </div>

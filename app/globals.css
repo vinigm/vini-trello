@@ -1122,28 +1122,12 @@ select:focus-visible {
   width: 15px;
   height: 15px;
   position: absolute;
-  left: 9px;
+  right: 9px;
   bottom: 5px;
   display: grid;
   place-items: center;
   color: #69717b;
   pointer-events: none;
-}
-
-.card-inline-title {
-  min-width: 0;
-  height: 24px;
-  margin: -3px 0;
-  padding: 0 5px;
-  border: 1px solid #6f8cad;
-  border-radius: 4px;
-  outline: 0;
-  flex: 1;
-  color: #25282d;
-  background: #fff;
-  font-size: 13px;
-  line-height: 1.32;
-  user-select: text;
 }
 
 .card-detail-button {
