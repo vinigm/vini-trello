@@ -9,6 +9,7 @@ import {
   PointerSensor,
   TouchSensor,
   closestCorners,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -30,24 +31,36 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   ArrowLeft,
   ArrowRight,
   Bell,
+  Bold,
   CalendarDays,
   Check,
   Cloud,
   CloudOff,
   Columns3,
   GripVertical,
+  Highlighter,
+  Italic,
   LayoutDashboard,
   LoaderCircle,
   LogIn,
+  List,
+  ListChecks,
+  ListOrdered,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
   Sparkles,
+  Strikethrough,
   Trash2,
+  Underline,
   X,
 } from "lucide-react";
 import {
@@ -66,6 +79,12 @@ import { auth, db } from "../src/firebase";
 type Priority = "low" | "medium" | "high";
 type Theme = "peach" | "lilac" | "ocean" | "midnight" | "rose" | "sage" | "sky" | "sand" | "paper" | "graphite";
 
+type ActivityEntry = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
 type CardItem = {
   id: string;
   title: string;
@@ -76,6 +95,7 @@ type CardItem = {
   priority: Priority;
   checklistDone: number;
   checklistTotal: number;
+  activity?: ActivityEntry[];
 };
 
 type ColumnItem = {
@@ -98,6 +118,7 @@ type WorkspaceState = {
   activeBoardId: string;
   boards: BoardState[];
   plannerNotes: Record<string, string>;
+  plannerSlotColors: Record<string, string>;
 };
 
 type SaveStatus = "loading" | "saving" | "saved" | "offline";
@@ -340,7 +361,11 @@ function migrateBoard(board: BoardState) {
 
 function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
   if (workspace.schemaVersion === WORKSPACE_SCHEMA_VERSION) {
-    return { ...workspace, plannerNotes: workspace.plannerNotes ?? {} };
+    return {
+      ...workspace,
+      plannerNotes: workspace.plannerNotes ?? {},
+      plannerSlotColors: workspace.plannerSlotColors ?? {},
+    };
   }
 
   const boards = [...workspace.boards];
@@ -354,6 +379,7 @@ function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
     activeBoardId: boards.some((board) => board.id === workspace.activeBoardId) ? workspace.activeBoardId : boards[0].id,
     boards: boards.map(migrateBoard),
     plannerNotes: workspace.plannerNotes ?? {},
+    plannerSlotColors: workspace.plannerSlotColors ?? {},
   };
 }
 
@@ -367,6 +393,7 @@ const DEFAULT_WORKSPACE = migrateWorkspace({
     createBlankBoard("mestrado", "Mestrado", "midnight"),
   ],
   plannerNotes: {},
+  plannerSlotColors: {},
 });
 
 function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?: Omit<BoardState, "id"> }) {
@@ -388,6 +415,7 @@ function getWorkspaceFromPayload(payload?: { workspace?: WorkspaceState; state?:
       activeBoardId: legacyBoard.id,
       boards: [legacyBoard, ...DEFAULT_WORKSPACE.boards.slice(1)],
       plannerNotes: {},
+      plannerSlotColors: {},
     });
   }
 
@@ -454,14 +482,33 @@ function findColumnForCard(board: BoardState, cardId: string) {
 function SortableCard({
   card,
   onOpen,
+  onRename,
 }: {
   card: CardItem;
   onOpen: (id: string) => void;
+  onRename: (id: string, title: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(card.title);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id, data: { type: "card" } });
+    useSortable({ id: card.id, data: { type: "card" }, disabled: editing });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const pointerMoved = useRef(false);
+
+  useEffect(() => {
+    if (editing) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editing]);
+
+  function finishInlineEdit() {
+    const nextTitle = title.trim();
+    if (nextTitle && nextTitle !== card.title) onRename(card.id, nextTitle);
+    if (!nextTitle) setTitle(card.title);
+    setEditing(false);
+  }
 
   const style: CSSProperties = {
     transform: DndCSS.Transform.toString(transform),
@@ -477,7 +524,7 @@ function SortableCard({
       {...listeners}
       role="button"
       tabIndex={0}
-      aria-label={`${card.title}. Clique para editar ou arraste para mover.`}
+      aria-label={`${card.title}. Clique para editar o título ou arraste para mover.`}
       onPointerDownCapture={(event) => {
         pointerStart.current = { x: event.clientX, y: event.clientY };
         pointerMoved.current = false;
@@ -490,19 +537,48 @@ function SortableCard({
       }}
       onClick={() => {
         pointerStart.current = null;
-        if (pointerMoved.current) return;
-        onOpen(card.id);
+        if (pointerMoved.current || editing) return;
+        setTitle(card.title);
+        setEditing(true);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter") {
+        if (!editing && event.key === "Enter") {
           event.preventDefault();
-          onOpen(card.id);
+          setTitle(card.title);
+          setEditing(true);
           return;
         }
         listeners?.onKeyDown?.(event);
       }}
     >
-      <h3>{card.title}</h3>
+      {editing ? (
+        <input
+          ref={titleInputRef}
+          className="card-inline-title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onBlur={finishInlineEdit}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") { event.preventDefault(); finishInlineEdit(); }
+            if (event.key === "Escape") { event.preventDefault(); setTitle(card.title); setEditing(false); }
+          }}
+          aria-label="Editar título do cartão"
+        />
+      ) : <h3>{card.title}</h3>}
+      <button
+        type="button"
+        className="card-detail-button"
+        aria-label={`Abrir detalhes de ${card.title}`}
+        title="Editar descrição e atividades"
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); onOpen(card.id); }}
+      >
+        <Pencil size={15} />
+      </button>
     </div>
   );
 }
@@ -520,12 +596,14 @@ function BoardColumn({
   cards,
   onAdd,
   onOpenCard,
+  onRenameCard,
   onEditColumn,
 }: {
   column: ColumnItem;
   cards: CardItem[];
   onAdd: (columnId: string) => void;
   onOpenCard: (id: string) => void;
+  onRenameCard: (id: string, title: string) => void;
   onEditColumn: (columnId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `column-${column.id}` });
@@ -555,7 +633,7 @@ function BoardColumn({
       <div className="card-list">
         <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
-            <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
+            <SortableCard key={card.id} card={card} onOpen={onOpenCard} onRename={onRenameCard} />
           ))}
         </SortableContext>
         {cards.length === 0 && (
@@ -607,22 +685,127 @@ function SortableDesktop({
 
 type CardDraft = Omit<CardItem, "id"> & { columnId: string };
 
+function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const selectionRef = useRef<Range | null>(null);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && document.activeElement !== editor && editor.innerHTML !== value) editor.innerHTML = value;
+  }, [value]);
+
+  function rememberSelection() {
+    const selection = window.getSelection();
+    if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+      selectionRef.current = selection.getRangeAt(0).cloneRange();
+    }
+  }
+
+  function restoreSelection() {
+    const selection = window.getSelection();
+    if (!selection || !selectionRef.current) return;
+    selection.removeAllRanges();
+    selection.addRange(selectionRef.current);
+  }
+
+  function syncValue() {
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  }
+
+  function runCommand(command: string, commandValue?: string) {
+    editorRef.current?.focus();
+    restoreSelection();
+    document.execCommand(command, false, commandValue);
+    rememberSelection();
+    syncValue();
+  }
+
+  function toolbarButton(label: string, icon: ReactNode, command: string, commandValue?: string) {
+    return (
+      <button type="button" aria-label={label} title={label} onMouseDown={(event) => { event.preventDefault(); runCommand(command, commandValue); }}>
+        {icon}
+      </button>
+    );
+  }
+
+  return (
+    <div className="rich-editor-shell">
+      <div className="rich-editor-toolbar" aria-label="Ferramentas de formatação">
+        <select
+          aria-label="Formato do texto"
+          defaultValue="p"
+          onPointerDown={rememberSelection}
+          onChange={(event) => runCommand("formatBlock", event.target.value)}
+        >
+          <option value="p">Texto</option>
+          <option value="h2">Título</option>
+          <option value="blockquote">Citação</option>
+        </select>
+        <span className="toolbar-divider" />
+        {toolbarButton("Negrito", <Bold size={15} />, "bold")}
+        {toolbarButton("Itálico", <Italic size={15} />, "italic")}
+        {toolbarButton("Sublinhado", <Underline size={15} />, "underline")}
+        {toolbarButton("Tachado", <Strikethrough size={15} />, "strikeThrough")}
+        <label className="rich-color-tool" title="Cor do texto">
+          <span>A</span><input type="color" defaultValue="#303238" onChange={(event) => runCommand("foreColor", event.target.value)} aria-label="Cor do texto" />
+        </label>
+        <label className="rich-color-tool" title="Cor de fundo do texto">
+          <Highlighter size={15} /><input type="color" defaultValue="#fff0a8" onChange={(event) => runCommand("hiliteColor", event.target.value)} aria-label="Cor de fundo do texto" />
+        </label>
+        <span className="toolbar-divider" />
+        {toolbarButton("Alinhar à esquerda", <AlignLeft size={15} />, "justifyLeft")}
+        {toolbarButton("Centralizar", <AlignCenter size={15} />, "justifyCenter")}
+        {toolbarButton("Alinhar à direita", <AlignRight size={15} />, "justifyRight")}
+        <span className="toolbar-divider" />
+        {toolbarButton("Lista com marcadores", <List size={16} />, "insertUnorderedList")}
+        {toolbarButton("Lista numerada", <ListOrdered size={16} />, "insertOrderedList")}
+        {toolbarButton("Checklist", <ListChecks size={16} />, "insertHTML", '<div class="rich-check-item"><input type="checkbox"> <span>Item da lista</span></div><div><br></div>')}
+      </div>
+      <div
+        ref={editorRef}
+        className="rich-description-editor"
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        tabIndex={0}
+        aria-multiline="true"
+        data-placeholder="Escreva a descrição, links, listas ou observações…"
+        onInput={syncValue}
+        onKeyUp={rememberSelection}
+        onMouseUp={rememberSelection}
+        onFocus={rememberSelection}
+        onClick={(event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement && target.type === "checkbox") {
+            if (target.checked) target.setAttribute("checked", "");
+            else target.removeAttribute("checked");
+            window.requestAnimationFrame(syncValue);
+          }
+        }}
+        aria-label="Descrição do cartão"
+      />
+    </div>
+  );
+}
+
+function formatActivityDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Agora";
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
 function CardModal({
   card,
   columnId,
-  columns,
   onClose,
   onSave,
   onDelete,
-  onMove,
 }: {
   card?: CardItem;
   columnId: string;
-  columns: ColumnItem[];
   onClose: () => void;
   onSave: (draft: CardDraft) => void;
   onDelete?: () => void;
-  onMove?: (direction: -1 | 1) => void;
 }) {
   const [draft, setDraft] = useState<CardDraft>({
     title: card?.title ?? "",
@@ -633,10 +816,10 @@ function CardModal({
     priority: card?.priority ?? "medium",
     checklistDone: card?.checklistDone ?? 0,
     checklistTotal: card?.checklistTotal ?? 0,
+    activity: card?.activity ?? [],
     columnId,
   });
-
-  const currentColumnIndex = columns.findIndex((column) => column.id === columnId);
+  const [activityText, setActivityText] = useState("");
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -644,116 +827,78 @@ function CardModal({
     onSave({ ...draft, title: draft.title.trim(), description: draft.description.trim() });
   }
 
+  function addActivity() {
+    const text = activityText.trim();
+    if (!text) return;
+    setDraft((current) => ({
+      ...current,
+      activity: [...(current.activity ?? []), { id: makeId("activity"), text, createdAt: new Date().toISOString() }],
+    }));
+    setActivityText("");
+  }
+
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop card-drawer-backdrop">
       <button type="button" className="backdrop-dismiss" aria-label="Fechar editor do cartão" onClick={onClose} />
-      <section
-        className="modal-card card-editor"
+      <aside
+        className="card-drawer"
         role="dialog"
         aria-modal="true"
         aria-labelledby="card-modal-title"
       >
-        <div className="modal-heading">
-          <div className="modal-icon"><Columns3 size={19} /></div>
+        <div className="card-drawer-heading">
           <div>
-            <span>{card ? "Editar cartão" : "Novo cartão"}</span>
-            <h2 id="card-modal-title">{card ? card.title : "O que precisa ser feito?"}</h2>
+            <span>{card ? "Detalhes do cartão" : "Novo cartão"}</span>
+            <h2 id="card-modal-title">{card ? "Editar conteúdo" : "Criar cartão"}</h2>
           </div>
           <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <label className="field full-field">
-            <span>Título</span>
-            <input
-              value={draft.title}
-              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-              placeholder="Ex.: Planejar a próxima semana"
-              required
-            />
-          </label>
+        <form className="card-drawer-form" onSubmit={handleSubmit}>
+          <div className="card-drawer-content">
+            <label className="field card-title-field">
+              <span>Título</span>
+              <input
+                value={draft.title}
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                placeholder="Ex.: Planejar a próxima semana"
+                required
+              />
+            </label>
 
-          <label className="field full-field">
-            <span>Descrição</span>
-            <textarea
-              value={draft.description}
-              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-              placeholder="Adicione contexto, links ou pequenas anotações…"
-              rows={4}
-            />
-          </label>
+            <section className="description-section">
+              <div className="drawer-section-heading"><span>Descrição</span><small>Formatação completa</small></div>
+              <RichTextEditor value={draft.description} onChange={(description) => setDraft((current) => ({ ...current, description }))} />
+            </section>
 
-          <div className="form-grid">
-            <label className="field">
-              <span>Coluna</span>
-              <select value={draft.columnId} onChange={(event) => setDraft({ ...draft, columnId: event.target.value })}>
-                {columns.map((column) => <option key={column.id} value={column.id}>{column.title}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>Prioridade</span>
-              <select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as Priority })}>
-                <option value="low">Baixa</option>
-                <option value="medium">Média</option>
-                <option value="high">Alta</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Etiqueta</span>
-              <input value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} placeholder="Ex.: Trabalho" />
-            </label>
-            <label className="field">
-              <span>Prazo</span>
-              <input type="date" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} />
-            </label>
+            <section className="activity-journal">
+              <div className="drawer-section-heading"><span>Diário de atividades</span><small>{draft.activity?.length ?? 0} registros</small></div>
+              <div className="activity-composer">
+                <textarea value={activityText} onChange={(event) => setActivityText(event.target.value)} placeholder="O que você fez? O que ainda falta?" rows={3} />
+                <button type="button" className="primary-button" disabled={!activityText.trim()} onClick={addActivity}>Adicionar registro</button>
+              </div>
+              <div className="activity-list">
+                {[...(draft.activity ?? [])].reverse().map((entry) => (
+                  <article key={entry.id}>
+                    <div><time>{formatActivityDate(entry.createdAt)}</time><button type="button" aria-label="Excluir registro" onClick={() => setDraft((current) => ({ ...current, activity: current.activity?.filter((item) => item.id !== entry.id) }))}><Trash2 size={13} /></button></div>
+                    <p>{entry.text}</p>
+                  </article>
+                ))}
+                {!draft.activity?.length && <p className="activity-empty">Nenhum registro ainda. Use este espaço como um diário do cartão.</p>}
+              </div>
+            </section>
           </div>
 
-          <fieldset className="color-fieldset">
-            <legend>Cor da etiqueta</legend>
-            <div className="color-row">
-              {LABEL_COLORS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className={`color-choice ${draft.labelColor === color ? "selected" : ""}`}
-                  style={{ background: color }}
-                  aria-label={`Escolher cor ${color}`}
-                  onClick={() => setDraft({ ...draft, labelColor: color })}
-                >
-                  {draft.labelColor === color && <Check size={15} />}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="checklist-fields">
-            <span>Checklist</span>
-            <label><input type="number" min="0" value={draft.checklistDone} onChange={(event) => setDraft({ ...draft, checklistDone: Math.max(0, Number(event.target.value)) })} /> feitos</label>
-            <span>de</span>
-            <label><input type="number" min="0" value={draft.checklistTotal} onChange={(event) => setDraft({ ...draft, checklistTotal: Math.max(0, Number(event.target.value)) })} /> itens</label>
-          </div>
-
-          <div className="modal-actions">
-            <div className="secondary-actions">
-              {card && onDelete && (
-                <button type="button" className="danger-button" onClick={onDelete}>
-                  <Trash2 size={16} /> Excluir
-                </button>
-              )}
-              {card && onMove && (
-                <div className="move-actions" aria-label="Mover cartão entre colunas">
-                  <button type="button" disabled={currentColumnIndex <= 0} onClick={() => onMove(-1)} aria-label="Mover para a coluna anterior"><ArrowLeft size={17} /></button>
-                  <button type="button" disabled={currentColumnIndex >= columns.length - 1} onClick={() => onMove(1)} aria-label="Mover para a próxima coluna"><ArrowRight size={17} /></button>
-                </div>
-              )}
-            </div>
+          <div className="card-drawer-actions">
+            {card && onDelete && <button type="button" className="danger-button" onClick={onDelete}><Trash2 size={16} /> Excluir</button>}
+            <span className="modal-spacer" />
             <button type="button" className="text-button" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="primary-button">{card ? "Salvar alterações" : "Criar cartão"}</button>
+            <button type="submit" className="primary-button">{card ? "Salvar" : "Criar cartão"}</button>
           </div>
         </form>
-      </section>
+      </aside>
     </div>
   );
 }
@@ -879,17 +1024,93 @@ function weekSlotKey(date: Date, time: string) {
   return `week:${dateKey(date)}:${time}`;
 }
 
+function WeeklySlot({
+  slotKey,
+  value,
+  color,
+  isFullHour,
+  inputRef,
+  onChange,
+  onChangeColor,
+  onPaste,
+  onCopy,
+  onKeyDown,
+  ariaLabel,
+}: {
+  slotKey: string;
+  value: string;
+  color: string;
+  isFullHour: boolean;
+  inputRef: (node: HTMLInputElement | null) => void;
+  onChange: (value: string) => void;
+  onChangeColor: (color: string) => void;
+  onPaste: (event: ReactClipboardEvent<HTMLInputElement>) => void;
+  onCopy: (event: ReactClipboardEvent<HTMLInputElement>) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  ariaLabel: string;
+}) {
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: `week-slot-${slotKey}`,
+    data: { type: "week-slot", slotKey },
+  });
+  const { attributes, listeners, setNodeRef: setDraggableRef, transform, isDragging } = useDraggable({
+    id: `week-card-${slotKey}`,
+    data: { type: "week-card", slotKey },
+    disabled: !value,
+  });
+  const cardStyle = {
+    "--slot-color": color,
+    transform: DndCSS.Translate.toString(transform),
+  } as CSSProperties;
+
+  return (
+    <div ref={setDroppableRef} className={`week-slot ${isFullHour ? "is-full-hour" : ""} ${isOver ? "is-over" : ""}`} role="gridcell">
+      <div ref={setDraggableRef} className={`week-slot-card ${value ? "has-value" : ""} ${isDragging ? "is-dragging" : ""}`} style={cardStyle}>
+        <input
+          ref={inputRef}
+          value={value}
+          title={value}
+          onChange={(event) => onChange(event.target.value)}
+          onPaste={onPaste}
+          onCopy={onCopy}
+          onKeyDown={onKeyDown}
+          aria-label={ariaLabel}
+        />
+        {value && (
+          <div className="week-card-tools">
+            <button type="button" className="week-card-drag" aria-label="Arrastar compromisso" title="Arrastar para outro horário" {...attributes} {...listeners}><GripVertical size={13} /></button>
+            <label className="week-card-color" title="Cor do compromisso" onPointerDown={(event) => event.stopPropagation()}>
+              <span style={{ background: color }} />
+              <input type="color" value={color} onChange={(event) => onChangeColor(event.target.value)} aria-label="Escolher cor do compromisso" />
+            </label>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function WeeklyPlannerGrid({
   days,
   notes,
+  colors,
   onChangeNote,
+  onChangeColor,
+  onMoveSlot,
 }: {
   days: Date[];
   notes: Record<string, string>;
+  colors: Record<string, string>;
   onChangeNote: (key: string, value: string) => void;
+  onChangeColor: (key: string, color: string) => void;
+  onMoveSlot: (sourceKey: string, targetKey: string) => void;
 }) {
   const cellRefs = useRef(new Map<string, HTMLInputElement>());
   const today = dateKey(new Date());
+  const scheduleSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 6 } }),
+  );
 
   function focusCell(row: number, column: number) {
     const boundedRow = Math.max(0, Math.min(WEEK_TIME_SLOTS.length - 1, row));
@@ -932,10 +1153,17 @@ function WeeklyPlannerGrid({
     }
   }
 
+  function handleScheduleDragEnd(event: DragEndEvent) {
+    const sourceKey = event.active.data.current?.slotKey as string | undefined;
+    const targetKey = event.over?.data.current?.slotKey as string | undefined;
+    if (sourceKey && targetKey && sourceKey !== targetKey) onMoveSlot(sourceKey, targetKey);
+  }
+
   return (
     <div className="week-planner">
-      <div className="week-schedule-scroll">
-        <div className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
+      <DndContext sensors={scheduleSensors} collisionDetection={closestCorners} onDragEnd={handleScheduleDragEnd}>
+        <div className="week-schedule-scroll">
+          <div className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
           <div className="week-schedule-corner" role="columnheader">Horário</div>
           {days.map((date, index) => (
             <header key={dateKey(date)} className={`week-schedule-day ${dateKey(date) === today ? "is-today" : ""}`} role="columnheader">
@@ -953,26 +1181,28 @@ function WeeklyPlannerGrid({
                   const key = weekSlotKey(date, time);
                   const value = notes[key] ?? "";
                   return (
-                    <div key={key} className={`week-slot ${isFullHour ? "is-full-hour" : ""}`} role="gridcell">
-                      <input
-                        ref={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
-                        className={value ? "has-value" : ""}
-                        value={value}
-                        title={value}
-                        onChange={(event) => onChangeNote(key, event.target.value)}
-                        onPaste={(event) => handlePaste(event, row, column)}
-                        onCopy={(event) => handleCopy(event, value)}
-                        onKeyDown={(event) => handleCellKeyDown(event, row, column)}
-                        aria-label={`${WEEKDAYS[column]}, ${dateKey(date)}, às ${time}`}
-                      />
-                    </div>
+                    <WeeklySlot
+                      key={key}
+                      slotKey={key}
+                      value={value}
+                      color={colors[key] ?? "#ffffff"}
+                      isFullHour={isFullHour}
+                      inputRef={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
+                      onChange={(nextValue) => onChangeNote(key, nextValue)}
+                      onChangeColor={(nextColor) => onChangeColor(key, nextColor)}
+                      onPaste={(event) => handlePaste(event, row, column)}
+                      onCopy={(event) => handleCopy(event, value)}
+                      onKeyDown={(event) => handleCellKeyDown(event, row, column)}
+                      ariaLabel={`${WEEKDAYS[column]}, ${dateKey(date)}, às ${time}`}
+                    />
                   );
                 })}
               </div>
             );
           })}
+          </div>
         </div>
-      </div>
+      </DndContext>
       <p className="week-schedule-help">Cole células do Excel ou Google Planilhas diretamente na grade. Tab avança e Enter desce no mesmo dia.</p>
     </div>
   );
@@ -982,16 +1212,22 @@ function PlanningWorkspace({
   mode,
   cursor,
   notes,
+  colors,
   onChangeMode,
   onChangeCursor,
   onChangeNote,
+  onChangeColor,
+  onMoveSlot,
 }: {
   mode: PlanningMode;
   cursor: Date;
   notes: Record<string, string>;
+  colors: Record<string, string>;
   onChangeMode: (mode: PlanningMode) => void;
   onChangeCursor: (date: Date) => void;
   onChangeNote: (key: string, value: string) => void;
+  onChangeColor: (key: string, color: string) => void;
+  onMoveSlot: (sourceKey: string, targetKey: string) => void;
 }) {
   const weekStart = startOfWeek(cursor);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -1022,7 +1258,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <WeeklyPlannerGrid days={weekDays} notes={notes} onChangeNote={onChangeNote} />
+        <WeeklyPlannerGrid days={weekDays} notes={notes} colors={colors} onChangeNote={onChangeNote} onChangeColor={onChangeColor} onMoveSlot={onMoveSlot} />
       )}
 
       {mode === "month" && (
@@ -1098,6 +1334,36 @@ export default function Home() {
       ...current,
       plannerNotes: { ...current.plannerNotes, [key]: value },
     }));
+  }
+
+  function setPlannerSlotColor(key: string, color: string) {
+    setWorkspaceState((current) => ({
+      ...current,
+      plannerSlotColors: { ...current.plannerSlotColors, [key]: color },
+    }));
+  }
+
+  function movePlannerSlot(sourceKey: string, targetKey: string) {
+    setWorkspaceState((current) => {
+      const sourceValue = current.plannerNotes[sourceKey] ?? "";
+      if (!sourceValue) return current;
+      const targetValue = current.plannerNotes[targetKey] ?? "";
+      const sourceColor = current.plannerSlotColors[sourceKey] ?? "#ffffff";
+      const targetColor = current.plannerSlotColors[targetKey] ?? "#ffffff";
+      return {
+        ...current,
+        plannerNotes: {
+          ...current.plannerNotes,
+          [sourceKey]: targetValue,
+          [targetKey]: sourceValue,
+        },
+        plannerSlotColors: {
+          ...current.plannerSlotColors,
+          [sourceKey]: targetValue ? targetColor : "#ffffff",
+          [targetKey]: sourceColor,
+        },
+      };
+    });
   }
 
   const sensors = useSensors(
@@ -1289,19 +1555,27 @@ export default function Home() {
     }, boardId);
   }
 
+  function renameCard(boardId: string, cardId: string, title: string) {
+    setBoard((current) => ({
+      ...current,
+      cards: current.cards.map((card) => card.id === cardId ? { ...card, title } : card),
+    }), boardId);
+  }
+
   function saveCard(draft: CardDraft) {
     if (!cardModal) return;
     const boardId = cardModal.boardId;
+    const { columnId, ...cardValues } = draft;
     if (cardModal?.mode === "edit" && cardModal.cardId) {
       const cardId = cardModal.cardId;
       setBoard((current) => {
         const oldColumn = findColumnForCard(current, cardId);
         return {
           ...current,
-          cards: current.cards.map((card) => card.id === cardId ? { ...card, ...draft, id: cardId } : card),
+          cards: current.cards.map((card) => card.id === cardId ? { ...card, ...cardValues, id: cardId } : card),
           columns: current.columns.map((column) => {
-            if (column.id === oldColumn?.id && column.id !== draft.columnId) return { ...column, cardIds: column.cardIds.filter((id) => id !== cardId) };
-            if (column.id === draft.columnId && !column.cardIds.includes(cardId)) return { ...column, cardIds: [...column.cardIds, cardId] };
+            if (column.id === oldColumn?.id && column.id !== columnId) return { ...column, cardIds: column.cardIds.filter((id) => id !== cardId) };
+            if (column.id === columnId && !column.cardIds.includes(cardId)) return { ...column, cardIds: [...column.cardIds, cardId] };
             return column;
           }),
         };
@@ -1310,8 +1584,8 @@ export default function Home() {
       const id = makeId("card");
       setBoard((current) => ({
         ...current,
-        cards: [...current.cards, { ...draft, id }],
-        columns: current.columns.map((column) => column.id === draft.columnId ? { ...column, cardIds: [...column.cardIds, id] } : column),
+        cards: [...current.cards, { ...cardValues, id }],
+        columns: current.columns.map((column) => column.id === columnId ? { ...column, cardIds: [...column.cardIds, id] } : column),
       }), boardId);
     }
     setCardModal(null);
@@ -1326,26 +1600,6 @@ export default function Home() {
       columns: current.columns.map((column) => ({ ...column, cardIds: column.cardIds.filter((id) => id !== cardId) })),
     }), cardModal.boardId);
     setCardModal(null);
-  }
-
-  function moveCard(cardId: string, direction: -1 | 1) {
-    if (!cardModal) return;
-    setBoard((current) => {
-      const source = findColumnForCard(current, cardId);
-      if (!source) return current;
-      const sourceIndex = current.columns.findIndex((column) => column.id === source.id);
-      const target = current.columns[sourceIndex + direction];
-      if (!target) return current;
-      setCardModal((modal) => modal ? { ...modal, columnId: target.id } : modal);
-      return {
-        ...current,
-        columns: current.columns.map((column) => {
-          if (column.id === source.id) return { ...column, cardIds: column.cardIds.filter((id) => id !== cardId) };
-          if (column.id === target.id) return { ...column, cardIds: [...column.cardIds, cardId] };
-          return column;
-        }),
-      };
-    }, cardModal.boardId);
   }
 
   function saveColumn(title: string, color: string) {
@@ -1432,7 +1686,7 @@ export default function Home() {
         </header>
 
         {activeView === "planning" ? (
-          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} />
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColor={setPlannerSlotColor} onMoveSlot={movePlannerSlot} />
         ) : <>
           {(query || priorityFilter !== "all") && (
             <div className="filter-summary"><span>{filteredCardCount} {filteredCardCount === 1 ? "cartão encontrado" : "cartões encontrados"} em todos os desktops</span><button type="button" onClick={() => { setQuery(""); setPriorityFilter("all"); }}>Limpar filtros <X size={14} /></button></div>
@@ -1449,7 +1703,7 @@ export default function Home() {
                   <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
                     {project.columns.map((column) => {
                       const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
-                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
+                      return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onRenameCard={(cardId, title) => renameCard(project.id, cardId, title)} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
                     })}
                     <button type="button" className="add-column-button" aria-label={`Adicionar lista ao desktop ${project.title}`} title="Adicionar outra lista" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><Plus size={18} /></button>
                   </div>
@@ -1473,11 +1727,9 @@ export default function Home() {
           key={`${cardModal.boardId}-${cardModal.mode}-${cardModal.cardId ?? cardModal.columnId}`}
           card={modalCard}
           columnId={cardModal.columnId}
-          columns={cardModalBoard.columns}
           onClose={() => setCardModal(null)}
           onSave={saveCard}
           onDelete={modalCard ? () => deleteCard(modalCard.id) : undefined}
-          onMove={modalCard ? (direction) => moveCard(modalCard.id, direction) : undefined}
         />
       )}
 
