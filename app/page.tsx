@@ -2144,8 +2144,8 @@ export default function Home() {
 
   function fillWorkWeek(days: Date[]) {
     const workTimes = WEEK_TIME_SLOTS.filter((time) => (
-      (time >= "08:00" && time <= "12:00")
-      || (time >= "13:30" && time <= "17:00")
+      (time >= "08:00" && time <= "11:30")
+      || (time >= "13:30" && time <= "16:30")
     ));
     const workKeys = days.slice(0, 5).flatMap((date) => workTimes.map((time) => weekSlotKey(date, time)));
 
