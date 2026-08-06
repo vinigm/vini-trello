@@ -45,7 +45,3 @@ jobs:
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v5
-        with:
-          # A fila do Pages já passou de 10 minutos várias vezes; com o padrão a
-          # publicação era cancelada e a implantação presa bloqueava as seguintes.
-          timeout: 1800000
