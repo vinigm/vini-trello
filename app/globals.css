@@ -1772,6 +1772,11 @@ select:focus-visible {
 }
 
 .week-bulk-actions strong { color: #31445c; font-size: 10px; }
+.week-bulk-fill { display: flex; align-items: center; gap: 3px; }
+.week-bulk-fill input { width: 118px; height: 21px; padding: 0 6px; border: 1px solid #b9c6d4; border-radius: 4px; outline: 0; color: #31343a; background: #fff; font-size: 9px; }
+.week-bulk-fill input:focus { border-color: #6f89a6; box-shadow: 0 0 0 2px rgba(85, 119, 159, 0.16); }
+.week-bulk-fill > button { width: 21px; height: 21px; padding: 0; border: 0; border-radius: 4px; display: grid; place-items: center; color: #fff; background: #354764; cursor: pointer; }
+.week-bulk-fill > button:disabled { opacity: 0.4; cursor: not-allowed; }
 .week-bulk-actions label { height: 21px; padding: 0 4px; border: 1px solid #d7dce2; border-radius: 4px; display: flex; align-items: center; background: #fff; cursor: pointer; }
 .week-bulk-actions label input { width: 14px; height: 14px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .week-bulk-actions > button { min-height: 21px; padding: 0 6px; border: 0; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; color: #66707d; background: transparent; cursor: pointer; font-size: 9px; font-weight: 700; }

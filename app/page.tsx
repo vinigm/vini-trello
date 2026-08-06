@@ -1605,7 +1605,7 @@ function WeeklySlot({
           ref={setDraggableRef}
           className={`week-slot-card ${value ? "has-value" : ""} ${primarySelected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""}`}
           style={cardStyle}
-          data-selection-id={value ? selectionId("primary", slotKey) : undefined}
+          data-selection-id={selectionId("primary", slotKey)}
           onContextMenu={(event) => {
             if (value) onOpenContextMenu(event, "primary");
           }}
@@ -1687,6 +1687,7 @@ function WeeklyPlannerGrid({
   activities,
   bulkSlot,
   onChangeNote,
+  onChangeNotes,
   onChangeColors,
   onMoveSlot,
   onMoveSlots,
@@ -1702,6 +1703,7 @@ function WeeklyPlannerGrid({
   activities: Record<string, PlannerActivity[]>;
   bulkSlot: HTMLElement | null;
   onChangeNote: (key: string, value: string) => void;
+  onChangeNotes: (keys: string[], value: string) => void;
   onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
   onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
@@ -1715,6 +1717,7 @@ function WeeklyPlannerGrid({
   const marqueeDragRef = useRef<{ x: number; y: number; snapshot: Set<string>; moved: boolean } | null>(null);
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
+  const [fillText, setFillText] = useState("");
   const marqueeActive = marquee !== null;
   const [contextMenu, setContextMenu] = useState<{ slotKey: string; kind: SelectionKind; activityId?: string; x: number; y: number } | null>(null);
   const workSlotSet = useMemo(() => new Set(workSlots), [workSlots]);
@@ -1734,6 +1737,13 @@ function WeeklyPlannerGrid({
     setSelection(new Set());
     setContextMenu(null);
   }, [onChangeColors, onChangeNote, onRemoveActivity, onRemoveWorkSlot, selection]);
+
+  function fillSelectedCells() {
+    const text = fillText.trim();
+    if (!text || !selectedPrimaryKeys.length) return;
+    onChangeNotes(selectedPrimaryKeys, text);
+    setFillText("");
+  }
 
   function toggleSelectionId(id: string) {
     setSelection((current) => {
@@ -1964,6 +1974,31 @@ function WeeklyPlannerGrid({
     <div className="week-bulk-actions" title="⌘ + clique soma outros · Delete apaga todos · arraste um card de texto para mover o grupo">
       <strong>{selection.size} {selection.size === 1 ? "selecionado" : "selecionados"}</strong>
       {selectedPrimaryKeys.length > 0 && (
+        <form
+          className="week-bulk-fill"
+          onSubmit={(event) => {
+            event.preventDefault();
+            fillSelectedCells();
+          }}
+        >
+          <input
+            value={fillText}
+            onChange={(event) => setFillText(event.target.value)}
+            onKeyDown={(event) => {
+              // O submit implícito do formulário não é garantido em toda situação,
+              // então o Enter preenche as células diretamente.
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              fillSelectedCells();
+            }}
+            placeholder={`Escrever nas ${selectedPrimaryKeys.length}`}
+            aria-label={`Escrever a mesma atividade nas ${selectedPrimaryKeys.length} células selecionadas`}
+            title="Digite e pressione Enter para preencher todas as células selecionadas"
+          />
+          <button type="submit" disabled={!fillText.trim()} aria-label="Preencher as células selecionadas" title="Preencher as células selecionadas"><Check size={12} /></button>
+        </form>
+      )}
+      {selectedPrimaryKeys.length > 0 && (
         <label title="Cor do grupo"><input type="color" defaultValue="#dce8f4" onChange={(event) => onChangeColors(selectedPrimaryKeys, event.target.value)} aria-label="Cor do grupo" /></label>
       )}
       <button type="button" className="week-bulk-delete" onClick={deleteSelection} title="Apagar os cards selecionados"><Trash2 size={12} /> Apagar</button>
@@ -2018,10 +2053,7 @@ function WeeklyPlannerGrid({
                       selection={selection}
                       isFullHour={isFullHour}
                       inputRef={(node) => { if (node) cellRefs.current.set(key, node); else cellRefs.current.delete(key); }}
-                      onChange={(nextValue) => {
-                        onChangeNote(key, nextValue);
-                        if (!nextValue) setSelection((current) => { const next = new Set(current); next.delete(selectionId("primary", key)); return next; });
-                      }}
+                      onChange={(nextValue) => onChangeNote(key, nextValue)}
                       onChangeColor={(nextColor) => onChangeColors(selection.has(selectionId("primary", key)) ? selectedPrimaryKeys : [key], nextColor)}
                       onToggleSelection={toggleSelection}
                       onPaste={(event) => handlePaste(event, row, column)}
@@ -2057,6 +2089,7 @@ function PlanningWorkspace({
   onChangeMode,
   onChangeCursor,
   onChangeNote,
+  onChangeNotes,
   onChangeColors,
   onMoveSlot,
   onMoveSlots,
@@ -2075,6 +2108,7 @@ function PlanningWorkspace({
   onChangeMode: (mode: PlanningMode) => void;
   onChangeCursor: (date: Date) => void;
   onChangeNote: (key: string, value: string) => void;
+  onChangeNotes: (keys: string[], value: string) => void;
   onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
   onMoveSlots: (moves: { sourceKey: string; targetKey: string }[]) => void;
@@ -2189,7 +2223,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} activities={activities} bulkSlot={bulkSlot} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} onAddActivity={onAddActivity} onMoveActivity={onMoveActivity} onRemoveActivity={onRemoveActivity} />
+        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} activities={activities} bulkSlot={bulkSlot} onChangeNote={onChangeNote} onChangeNotes={onChangeNotes} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} onAddActivity={onAddActivity} onMoveActivity={onMoveActivity} onRemoveActivity={onRemoveActivity} />
       )}
 
       {mode === "month" && (
@@ -2265,6 +2299,13 @@ export default function Home() {
     setWorkspaceState((current) => ({
       ...current,
       plannerNotes: { ...current.plannerNotes, [key]: value },
+    }));
+  }
+
+  function setPlannerNotes(keys: string[], value: string) {
+    setWorkspaceState((current) => ({
+      ...current,
+      plannerNotes: keys.reduce((next, key) => ({ ...next, [key]: value }), current.plannerNotes),
     }));
   }
 
@@ -2785,7 +2826,7 @@ export default function Home() {
         </header>
 
         {activeView === "planning" ? (
-          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} activities={workspaceState.plannerActivities} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} onAddActivity={addPlannerActivity} onMoveActivity={movePlannerActivity} onRemoveActivity={removePlannerActivity} />
+          <PlanningWorkspace mode={planningMode} cursor={plannerCursor} notes={workspaceState.plannerNotes} colors={workspaceState.plannerSlotColors} workSlots={workspaceState.plannerWorkSlots} activities={workspaceState.plannerActivities} onChangeMode={setPlanningMode} onChangeCursor={setPlannerCursor} onChangeNote={setPlannerNote} onChangeNotes={setPlannerNotes} onChangeColors={setPlannerSlotColors} onMoveSlot={movePlannerSlot} onMoveSlots={movePlannerSlots} onFillWorkWeek={fillWorkWeek} onRemoveWorkSlot={removeWorkSlot} onAddActivity={addPlannerActivity} onMoveActivity={movePlannerActivity} onRemoveActivity={removePlannerActivity} />
         ) : activeView === "diary" ? (
           <DiaryWorkspace posts={workspaceState.diaryPosts} onAdd={addDiaryPost} onUpdate={updateDiaryPost} onDelete={deleteDiaryPost} />
         ) : <>
