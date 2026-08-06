@@ -74,6 +74,7 @@ import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -1603,12 +1604,7 @@ function WeeklySlot({
           ref={setDraggableRef}
           className={`week-slot-card ${value ? "has-value" : ""} ${primarySelected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""}`}
           style={cardStyle}
-          onPointerDownCapture={(event) => {
-            if (!value || !isSelectionModifier(event)) return;
-            event.preventDefault();
-            event.stopPropagation();
-            onToggleSelection("primary", slotKey);
-          }}
+          data-selection-id={value ? selectionId("primary", slotKey) : undefined}
           onContextMenu={(event) => {
             if (value) onOpenContextMenu(event, "primary");
           }}
@@ -1642,15 +1638,10 @@ function WeeklySlot({
             type="button"
             className={`week-work-card ${workSelected ? "is-selected" : ""}`}
             aria-pressed={workSelected}
-            title="Trabalho — ⌘ + clique para selecionar, botão direito para opções"
-            onPointerDown={(event) => {
-              if (isSelectionModifier(event)) event.preventDefault();
-            }}
+            data-selection-id={selectionId("work", slotKey)}
+            title="Trabalho — ⌘ + clique ou ⌘ + arraste para selecionar, botão direito para opções"
             onClick={(event) => {
-              if (isSelectionModifier(event)) {
-                onToggleSelection("work", slotKey);
-                return;
-              }
+              if (isSelectionModifier(event)) return;
               primaryInputRef.current?.focus();
             }}
             onContextMenu={(event) => onOpenContextMenu(event, "work")}
@@ -1665,16 +1656,11 @@ function WeeklySlot({
             className={`week-activity-card ${selection.has(selectionId("activity", activity.id)) ? "is-selected" : ""}`}
             aria-pressed={selection.has(selectionId("activity", activity.id))}
             style={{ "--activity-color": activity.color } as CSSProperties}
-            title={`${activity.title} — arraste para mover, ⌘ + clique para selecionar ou botão direito para opções`}
+            data-selection-id={selectionId("activity", activity.id)}
+            title={`${activity.title} — arraste para mover, ⌘ + clique ou ⌘ + arraste para selecionar`}
             draggable
-            onPointerDown={(event) => {
-              if (isSelectionModifier(event)) event.preventDefault();
-            }}
             onClick={(event) => {
-              if (isSelectionModifier(event)) {
-                onToggleSelection("activity", activity.id);
-                return;
-              }
+              if (isSelectionModifier(event)) return;
               primaryInputRef.current?.focus();
             }}
             onDragStart={(event) => {
@@ -1722,7 +1708,11 @@ function WeeklyPlannerGrid({
   onRemoveActivity: (activityId: string) => void;
 }) {
   const cellRefs = useRef(new Map<string, HTMLInputElement>());
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const marqueeDragRef = useRef<{ x: number; y: number; snapshot: Set<string>; moved: boolean } | null>(null);
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
+  const marqueeActive = marquee !== null;
   const [contextMenu, setContextMenu] = useState<{ slotKey: string; kind: SelectionKind; activityId?: string; x: number; y: number } | null>(null);
   const workSlotSet = useMemo(() => new Set(workSlots), [workSlots]);
   const today = dateKey(new Date());
@@ -1742,15 +1732,83 @@ function WeeklyPlannerGrid({
     setContextMenu(null);
   }, [onChangeColors, onChangeNote, onRemoveActivity, onRemoveWorkSlot, selection]);
 
-  function toggleSelection(kind: SelectionKind, value: string) {
+  function toggleSelectionId(id: string) {
     setSelection((current) => {
       const next = new Set(current);
-      const id = selectionId(kind, value);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   }
+
+  function toggleSelection(kind: SelectionKind, value: string) {
+    toggleSelectionId(selectionId(kind, value));
+  }
+
+  function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
+    const grid = gridRef.current;
+    if (!grid || event.button !== 0 || !isSelectionModifier(event)) return;
+    event.preventDefault();
+    const rect = grid.getBoundingClientRect();
+    const origin = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    marqueeDragRef.current = { ...origin, snapshot: new Set(selection), moved: false };
+    setMarquee({ left: origin.x, top: origin.y, width: 0, height: 0 });
+  }
+
+  useEffect(() => {
+    if (!marqueeActive) return;
+
+    function handleMarqueeMove(event: PointerEvent) {
+      const drag = marqueeDragRef.current;
+      const grid = gridRef.current;
+      if (!drag || !grid) return;
+      const gridRect = grid.getBoundingClientRect();
+      const x = event.clientX - gridRect.left;
+      const y = event.clientY - gridRect.top;
+      const box = {
+        left: Math.min(drag.x, x),
+        top: Math.min(drag.y, y),
+        width: Math.abs(x - drag.x),
+        height: Math.abs(y - drag.y),
+      };
+      setMarquee(box);
+      if (!drag.moved && Math.max(box.width, box.height) <= 4) return;
+      drag.moved = true;
+
+      const next = new Set(drag.snapshot);
+      grid.querySelectorAll<HTMLElement>("[data-selection-id]").forEach((node) => {
+        const id = node.dataset.selectionId;
+        if (!id) return;
+        const nodeRect = node.getBoundingClientRect();
+        if (!nodeRect.width || !nodeRect.height) return;
+        const nodeLeft = nodeRect.left - gridRect.left;
+        const nodeTop = nodeRect.top - gridRect.top;
+        const overlapsX = nodeLeft <= box.left + box.width && nodeLeft + nodeRect.width >= box.left;
+        const overlapsY = nodeTop <= box.top + box.height && nodeTop + nodeRect.height >= box.top;
+        if (overlapsX && overlapsY) next.add(id);
+      });
+      setSelection(next);
+    }
+
+    function handleMarqueeEnd(event: PointerEvent) {
+      const drag = marqueeDragRef.current;
+      marqueeDragRef.current = null;
+      setMarquee(null);
+      if (!drag || drag.moved) return;
+      const node = document.elementFromPoint(event.clientX, event.clientY);
+      const card = node instanceof Element ? node.closest<HTMLElement>("[data-selection-id]") : null;
+      if (card?.dataset.selectionId) toggleSelectionId(card.dataset.selectionId);
+    }
+
+    window.addEventListener("pointermove", handleMarqueeMove);
+    window.addEventListener("pointerup", handleMarqueeEnd);
+    window.addEventListener("pointercancel", handleMarqueeEnd);
+    return () => {
+      window.removeEventListener("pointermove", handleMarqueeMove);
+      window.removeEventListener("pointerup", handleMarqueeEnd);
+      window.removeEventListener("pointercancel", handleMarqueeEnd);
+    };
+  }, [marqueeActive]);
 
   useEffect(() => {
     function handleSelectionKeys(event: KeyboardEvent) {
@@ -1919,8 +1977,9 @@ function WeeklyPlannerGrid({
         </div>
       )}
       <DndContext sensors={scheduleSensors} collisionDetection={closestCorners} onDragEnd={handleScheduleDragEnd}>
-        <div className="week-schedule-scroll">
-          <div className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
+        <div className={`week-schedule-scroll ${marqueeActive ? "is-marquee" : ""}`} onPointerDown={startMarquee}>
+          <div ref={gridRef} className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
+          {marquee && <div className="week-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} />}
           <div className="week-schedule-corner" role="columnheader">Horário</div>
           {days.map((date, index) => (
             <header key={dateKey(date)} className={`week-schedule-day ${dateKey(date) === today ? "is-today" : ""}`} role="columnheader">
