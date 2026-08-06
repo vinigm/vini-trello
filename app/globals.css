@@ -1623,6 +1623,14 @@ select:focus-visible {
 
 .week-activity-card:active { cursor: grabbing; }
 
+.week-work-card.is-selected,
+.week-activity-card.is-selected {
+  position: relative;
+  z-index: 3;
+  border-color: #3f5f85;
+  box-shadow: 0 0 0 2px rgba(79, 113, 152, 0.55);
+}
+
 .week-slot-card.has-value {
   border-color: rgba(67, 73, 81, 0.15);
   background: var(--slot-color, #fff);
@@ -1752,6 +1760,8 @@ select:focus-visible {
 .week-bulk-actions label input { width: 15px; height: 15px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .week-bulk-actions > button { min-height: 28px; padding: 0 8px; border: 0; border-radius: 5px; color: #66707d; background: transparent; cursor: pointer; font-size: 9px; font-weight: 700; }
 .week-bulk-actions > button:hover { background: #e4e9ee; }
+.week-bulk-actions > button.week-bulk-delete { display: flex; align-items: center; gap: 5px; color: #b5473f; background: #fbe9e7; }
+.week-bulk-actions > button.week-bulk-delete:hover { color: #fff; background: #c4544b; }
 
 .week-schedule-help {
   display: none;
