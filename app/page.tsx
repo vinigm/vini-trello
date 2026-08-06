@@ -1758,10 +1758,10 @@ function WeeklyPlannerGrid({
   useEffect(() => {
     if (!marqueeActive) return;
 
-    function handleMarqueeMove(event: PointerEvent) {
+    function applyMarquee(event: PointerEvent, keepVisible: boolean) {
       const drag = marqueeDragRef.current;
       const grid = gridRef.current;
-      if (!drag || !grid) return;
+      if (!drag || !grid) return false;
       const gridRect = grid.getBoundingClientRect();
       const x = event.clientX - gridRect.left;
       const y = event.clientY - gridRect.top;
@@ -1771,8 +1771,8 @@ function WeeklyPlannerGrid({
         width: Math.abs(x - drag.x),
         height: Math.abs(y - drag.y),
       };
-      setMarquee(box);
-      if (!drag.moved && Math.max(box.width, box.height) <= 4) return;
+      if (keepVisible) setMarquee(box);
+      if (!drag.moved && Math.max(box.width, box.height) <= 4) return false;
       drag.moved = true;
 
       const next = new Set(drag.snapshot);
@@ -1788,13 +1788,21 @@ function WeeklyPlannerGrid({
         if (overlapsX && overlapsY) next.add(id);
       });
       setSelection(next);
+      return true;
+    }
+
+    function handleMarqueeMove(event: PointerEvent) {
+      applyMarquee(event, true);
     }
 
     function handleMarqueeEnd(event: PointerEvent) {
+      // O último pointermove pode ficar atrás do ponto onde o mouse foi solto, então
+      // a seleção é recalculada aqui com a posição final antes de encerrar o laço.
+      const dragged = applyMarquee(event, false);
       const drag = marqueeDragRef.current;
       marqueeDragRef.current = null;
       setMarquee(null);
-      if (!drag || drag.moved) return;
+      if (!drag || dragged || drag.moved) return;
       const node = document.elementFromPoint(event.clientX, event.clientY);
       const card = node instanceof Element ? node.closest<HTMLElement>("[data-selection-id]") : null;
       if (card?.dataset.selectionId) toggleSelectionId(card.dataset.selectionId);
