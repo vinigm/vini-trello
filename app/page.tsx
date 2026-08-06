@@ -31,6 +31,7 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { createPortal } from "react-dom";
 import {
   AlignCenter,
   AlignLeft,
@@ -1684,6 +1685,7 @@ function WeeklyPlannerGrid({
   colors,
   workSlots,
   activities,
+  bulkSlot,
   onChangeNote,
   onChangeColors,
   onMoveSlot,
@@ -1698,6 +1700,7 @@ function WeeklyPlannerGrid({
   colors: Record<string, string>;
   workSlots: string[];
   activities: Record<string, PlannerActivity[]>;
+  bulkSlot: HTMLElement | null;
   onChangeNote: (key: string, value: string) => void;
   onChangeColors: (keys: string[], color: string) => void;
   onMoveSlot: (sourceKey: string, targetKey: string) => void;
@@ -1957,6 +1960,16 @@ function WeeklyPlannerGrid({
     contextMenu.kind === "activity" ? contextMenu.activityId ?? "" : contextMenu.slotKey,
   )));
   const contextMenuIsBulk = contextMenuSelected && selection.size > 1;
+  const bulkActions = (
+    <div className="week-bulk-actions" title="⌘ + clique soma outros · Delete apaga todos · arraste um card de texto para mover o grupo">
+      <strong>{selection.size} {selection.size === 1 ? "selecionado" : "selecionados"}</strong>
+      {selectedPrimaryKeys.length > 0 && (
+        <label title="Cor do grupo"><input type="color" defaultValue="#dce8f4" onChange={(event) => onChangeColors(selectedPrimaryKeys, event.target.value)} aria-label="Cor do grupo" /></label>
+      )}
+      <button type="button" className="week-bulk-delete" onClick={deleteSelection} title="Apagar os cards selecionados"><Trash2 size={12} /> Apagar</button>
+      <button type="button" onClick={() => setSelection(new Set())} aria-label="Limpar seleção" title="Limpar seleção"><X size={12} /></button>
+    </div>
+  );
 
   return (
     <div className="week-planner">
@@ -1973,17 +1986,7 @@ function WeeklyPlannerGrid({
           </div>
         </>
       )}
-      {selection.size > 0 && (
-        <div className="week-bulk-actions">
-          <strong>{selection.size} {selection.size === 1 ? "card selecionado" : "cards selecionados"}</strong>
-          <span>⌘ + clique soma outros · Delete apaga todos · arraste um card de texto para mover o grupo</span>
-          {selectedPrimaryKeys.length > 0 && (
-            <label>Cor do grupo<input type="color" defaultValue="#dce8f4" onChange={(event) => onChangeColors(selectedPrimaryKeys, event.target.value)} /></label>
-          )}
-          <button type="button" className="week-bulk-delete" onClick={deleteSelection}><Trash2 size={13} /> Apagar selecionados</button>
-          <button type="button" onClick={() => setSelection(new Set())}>Limpar seleção</button>
-        </div>
-      )}
+      {selection.size > 0 && (bulkSlot ? createPortal(bulkActions, bulkSlot) : bulkActions)}
       <DndContext sensors={scheduleSensors} collisionDetection={closestCorners} onDragEnd={handleScheduleDragEnd}>
         <div className={`week-schedule-scroll ${marqueeActive ? "is-marquee" : ""}`} onPointerDown={startMarquee}>
           <div ref={gridRef} className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
@@ -2084,6 +2087,7 @@ function PlanningWorkspace({
   const weekStart = startOfWeek(cursor);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const weekStartKey = dateKey(weekStart);
+  const [bulkSlot, setBulkSlot] = useState<HTMLDivElement | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const [customDay, setCustomDay] = useState(weekStartKey);
   const [customStart, setCustomStart] = useState("18:00");
@@ -2172,6 +2176,8 @@ function PlanningWorkspace({
                 </select>
                 <button type="submit" aria-label="Adicionar atividade personalizada" title="Adicionar ao cronograma"><Plus size={13} /></button>
               </form>
+              {/* A barra de seleção da grade é enviada para cá por portal, para não empurrar o cronograma. */}
+              <div className="planner-bulk-slot" ref={setBulkSlot} />
             </div>
           )}
         </div>
@@ -2183,7 +2189,7 @@ function PlanningWorkspace({
       </header>
 
       {mode === "week" && (
-        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} activities={activities} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} onAddActivity={onAddActivity} onMoveActivity={onMoveActivity} onRemoveActivity={onRemoveActivity} />
+        <WeeklyPlannerGrid key={dateKey(weekStart)} days={weekDays} notes={notes} colors={colors} workSlots={workSlots} activities={activities} bulkSlot={bulkSlot} onChangeNote={onChangeNote} onChangeColors={onChangeColors} onMoveSlot={onMoveSlot} onMoveSlots={onMoveSlots} onRemoveWorkSlot={onRemoveWorkSlot} onAddActivity={onAddActivity} onMoveActivity={onMoveActivity} onRemoveActivity={onRemoveActivity} />
       )}
 
       {mode === "month" && (
