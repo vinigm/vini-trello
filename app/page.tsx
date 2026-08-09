@@ -1288,6 +1288,8 @@ function CardModal({
     columnId,
   });
   const [activityText, setActivityText] = useState("");
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const isNewCard = !card;
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -1296,6 +1298,11 @@ function CardModal({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    // Cartão novo já abre com o cursor no título, pronto para digitar.
+    if (isNewCard) titleRef.current?.focus();
+  }, [isNewCard]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -1342,6 +1349,7 @@ function CardModal({
             <label className="field card-title-field">
               <span>Título</span>
               <textarea
+                ref={titleRef}
                 value={draft.title}
                 onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                 onKeyDown={(event) => {
