@@ -1304,10 +1304,14 @@ function CardModal({
     if (isNewCard) titleRef.current?.focus();
   }, [isNewCard]);
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function submitDraft() {
     if (!draft.title.trim()) return;
     onSave({ ...draft, title: draft.title.trim(), description: draft.description.trim() });
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    submitDraft();
   }
 
   function addActivity() {
@@ -1353,7 +1357,10 @@ function CardModal({
                 value={draft.title}
                 onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") event.preventDefault();
+                  // O título é de uma linha só: Enter confirma e fecha em vez de quebrar linha.
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  if (!event.shiftKey) submitDraft();
                 }}
                 placeholder="Ex.: Planejar a próxima semana"
                 rows={2}
