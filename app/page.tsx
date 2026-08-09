@@ -267,6 +267,7 @@ const DEFAULT_BOARD: BoardState = {
 const WORKSPACE_SCHEMA_VERSION = 3;
 
 const STANDARD_COLUMNS = [
+  { key: "backlog", title: "Backlog", color: "#e5e7eb" },
   { key: "todo", title: "A fazer", color: "#f8dddd" },
   { key: "doing", title: "Fazendo", color: "#dce8f4" },
   { key: "review", title: "Congelado em revisão", color: "#eee8f3" },
@@ -344,6 +345,7 @@ function createBlankBoard(id: string, title: string, theme: Theme): BoardState {
 
 function getStandardColumnKey(title: string) {
   const normalized = normalizeKey(title);
+  if (normalized.includes("backlog")) return "backlog";
   if (normalized.includes("andamento") || normalized === "fazendo") return "doing";
   if (normalized.includes("congelado") || normalized.includes("revisao")) return "review";
   if (normalized.includes("conclu") || normalized === "feito") return "done";
@@ -366,6 +368,23 @@ function ensureReviewColumn(board: BoardState) {
     cardIds: [],
   });
   return { ...board, columns };
+}
+
+// Reaproveita a cor de um Backlog que o usuário já tenha criado à mão; só cai no
+// padrão quando não existe nenhum em nenhum desktop.
+function findBacklogColor(boards: BoardState[]) {
+  const existing = boards
+    .flatMap((board) => board.columns)
+    .find((column) => getStandardColumnKey(column.title) === "backlog");
+  return existing?.color ?? STANDARD_COLUMNS[0].color;
+}
+
+function ensureBacklogColumn(board: BoardState, color: string) {
+  if (board.columns.some((column) => getStandardColumnKey(column.title) === "backlog")) return board;
+  return {
+    ...board,
+    columns: [{ id: `${board.id}-backlog`, title: "Backlog", color, cardIds: [] }, ...board.columns],
+  };
 }
 
 function migrateBoard(board: BoardState) {
@@ -415,7 +434,9 @@ function migrateBoard(board: BoardState) {
 
 function migrateWorkspace(workspace: WorkspaceState): WorkspaceState {
   if (workspace.schemaVersion === WORKSPACE_SCHEMA_VERSION) {
-    const boards = workspace.boards.map(ensureReviewColumn);
+    const reviewed = workspace.boards.map(ensureReviewColumn);
+    const backlogColor = findBacklogColor(reviewed);
+    const boards = reviewed.map((board) => ensureBacklogColumn(board, backlogColor));
     const plannerNotes = { ...(workspace.plannerNotes ?? {}) };
     const plannerSlotColors = { ...(workspace.plannerSlotColors ?? {}) };
     const plannerWorkSlots = new Set(workspace.plannerWorkSlots ?? []);
