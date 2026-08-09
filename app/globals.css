@@ -779,6 +779,67 @@ select:focus-visible {
 
 .desktop-settings-button:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
 
+.desktop-title-actions { display: flex; align-items: center; gap: 4px; }
+
+.desktop-archive-button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.desktop-archive-button:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.12); }
+.desktop-archive-button em { min-width: 16px; padding: 1px 4px; border-radius: 99px; color: #33405a; background: rgba(255, 255, 255, 0.86); font-size: 8px; font-style: normal; text-align: center; }
+
+.card-drawer-heading-actions { display: flex; align-items: center; gap: 8px; }
+
+.archive-button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d5dae0;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4a525d;
+  background: #f3f5f7;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.archive-button:hover { color: #28313b; border-color: #aeb5bf; background: #e8ebee; }
+
+.archive-drawer .card-drawer-heading small { display: block; margin-top: 2px; color: #8a8f96; font-size: 9px; }
+.archive-list { min-height: 0; padding: 16px 20px; flex: 1; display: grid; align-content: start; gap: 8px; overflow-y: auto; }
+
+.archive-item {
+  padding: 11px 12px;
+  border: 1px solid rgba(46, 43, 48, 0.12);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+}
+
+.archive-item h3 { margin: 0; font-size: 12px; font-weight: 650; text-transform: lowercase; }
+.archive-item time { color: #8a8f96; font-size: 9px; }
+.archive-item-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.archive-item-actions .secondary-button { min-height: 30px; padding: 0 10px; font-size: 9px; }
+.archive-empty { padding: 34px 12px; display: grid; place-items: center; gap: 5px; color: #8e8a83; text-align: center; }
+.archive-empty strong { color: #65635f; font-size: 12px; }
+.archive-empty p { margin: 0; max-width: 260px; font-size: 9px; line-height: 1.5; }
+
 .desktop-board-scroll {
   min-height: 0;
   padding-bottom: 4px;
@@ -1086,16 +1147,6 @@ select:focus-visible {
   transform: none;
   border-color: #aeb5bf;
   background: #fafbfc;
-}
-
-.task-card::before {
-  content: "";
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
-  border: 1px solid #707985;
-  border-radius: 50%;
-  flex: 0 0 auto;
 }
 
 .task-card.is-dragging { opacity: 0.35; }

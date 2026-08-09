@@ -36,6 +36,8 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   ArrowRight,
   Bell,
@@ -105,6 +107,7 @@ type CardItem = {
   checklistDone: number;
   checklistTotal: number;
   activity?: ActivityEntry[];
+  archivedAt?: string;
 };
 
 type ColumnItem = {
@@ -766,11 +769,15 @@ function BoardColumn({
 
 function SortableDesktop({
   project,
+  archivedCount,
   onCustomize,
+  onOpenArchive,
   children,
 }: {
   project: BoardState;
+  archivedCount: number;
   onCustomize: () => void;
+  onOpenArchive: () => void;
   children: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -789,7 +796,14 @@ function SortableDesktop({
       <header className="desktop-title-bar">
         <button type="button" className="desktop-drag-handle" aria-label={`Mover desktop ${project.title}`} title="Segure e arraste para reordenar" {...attributes} {...listeners}><GripVertical size={16} /></button>
         <h1>{project.title}</h1>
-        <button type="button" className="desktop-settings-button" aria-label={`Personalizar desktop ${project.title}`} title="Personalizar desktop" onClick={onCustomize}><SlidersHorizontal size={15} /></button>
+        <div className="desktop-title-actions">
+          <button type="button" className="desktop-archive-button" aria-label={`Arquivados do desktop ${project.title}`} title="Cartões arquivados" onClick={onOpenArchive}>
+            <Archive size={14} />
+            <span>Arquivados</span>
+            {archivedCount > 0 && <em>{archivedCount}</em>}
+          </button>
+          <button type="button" className="desktop-settings-button" aria-label={`Personalizar desktop ${project.title}`} title="Personalizar desktop" onClick={onCustomize}><SlidersHorizontal size={15} /></button>
+        </div>
       </header>
       {children}
     </section>
@@ -1252,12 +1266,14 @@ function CardModal({
   onClose,
   onSave,
   onDelete,
+  onArchive,
 }: {
   card?: CardItem;
   columnId: string;
   onClose: () => void;
   onSave: (draft: CardDraft) => void;
   onDelete?: () => void;
+  onArchive?: () => void;
 }) {
   const [draft, setDraft] = useState<CardDraft>({
     title: card?.title ?? "",
@@ -1308,9 +1324,17 @@ function CardModal({
       >
         <div className="card-drawer-heading">
           <h2 id="card-modal-title">{card ? "Detalhes do cartão" : "Novo cartão"}</h2>
-          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>
-            <X size={20} />
-          </button>
+          <div className="card-drawer-heading-actions">
+            {card && onArchive && (
+              <button type="button" className="archive-button" title="Arquivar cartão" onClick={onArchive}>
+                <Archive size={15} />
+                Arquivar
+              </button>
+            )}
+            <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}>
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <form className="card-drawer-form" onSubmit={handleSubmit}>
@@ -1437,6 +1461,78 @@ function ProjectModal({
           </div>
         </form>
       </section>
+    </div>
+  );
+}
+
+function ArchivePanel({
+  project,
+  onClose,
+  onRestore,
+  onDelete,
+}: {
+  project: BoardState;
+  onClose: () => void;
+  onRestore: (cardId: string) => void;
+  onDelete: (cardId: string) => void;
+}) {
+  const archived = project.cards
+    .filter((card) => card.archivedAt)
+    .sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop card-drawer-backdrop">
+      <button type="button" className="backdrop-dismiss" aria-label="Fechar arquivados" onClick={onClose} />
+      <aside className="card-drawer archive-drawer" role="dialog" aria-modal="true" aria-labelledby="archive-title">
+        <div className="card-drawer-heading">
+          <div>
+            <h2 id="archive-title">Arquivados</h2>
+            <small>{project.title} · {archived.length} {archived.length === 1 ? "cartão" : "cartões"}</small>
+          </div>
+          <button type="button" className="icon-button" aria-label="Fechar" onClick={onClose}><X size={20} /></button>
+        </div>
+
+        <div className="archive-list">
+          {archived.map((card) => (
+            <article key={card.id} className="archive-item">
+              <div>
+                <h3>{card.title}</h3>
+                <time dateTime={card.archivedAt}>arquivado {formatActivityDate(card.archivedAt!)}</time>
+              </div>
+              <div className="archive-item-actions">
+                <button type="button" className="secondary-button" title="Devolver para o quadro" onClick={() => onRestore(card.id)}>
+                  <ArchiveRestore size={15} />
+                  Restaurar
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Excluir ${card.title} definitivamente`}
+                  title="Excluir definitivamente"
+                  onClick={() => { if (window.confirm(`Excluir “${card.title}” definitivamente?`)) onDelete(card.id); }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </article>
+          ))}
+          {!archived.length && (
+            <div className="archive-empty">
+              <Archive size={21} />
+              <strong>Nada arquivado ainda</strong>
+              <p>Abra um cartão e use “Arquivar” para tirá-lo do quadro sem perder o conteúdo.</p>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
@@ -2278,6 +2374,7 @@ export default function Home() {
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showDesktopFilter, setShowDesktopFilter] = useState(false);
+  const [archiveBoardId, setArchiveBoardId] = useState<string | null>(null);
   const saveRequest = useRef(0);
   const board = workspaceState.boards.find((candidate) => candidate.id === workspaceState.activeBoardId)
     ?? workspaceState.boards[0];
@@ -2582,6 +2679,7 @@ export default function Home() {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
     return new Map(visibleBoards.map((project) => {
       const ids = project.cards.filter((card) => {
+        if (card.archivedAt) return false;
         const matchesQuery = !normalizedQuery || `${card.title} ${card.description} ${card.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery);
         const matchesPriority = priorityFilter === "all" || card.priority === priorityFilter;
         return matchesQuery && matchesPriority;
@@ -2713,6 +2811,41 @@ export default function Home() {
     setCardModal(null);
   }
 
+  function archiveCard(cardId: string) {
+    if (!cardModal) return;
+    const archivedAt = new Date().toISOString();
+    setBoard((current) => ({
+      ...current,
+      cards: current.cards.map((card) => card.id === cardId ? { ...card, archivedAt } : card),
+      columns: current.columns.map((column) => ({ ...column, cardIds: column.cardIds.filter((id) => id !== cardId) })),
+    }), cardModal.boardId);
+    setCardModal(null);
+  }
+
+  function restoreCard(boardId: string, cardId: string) {
+    setBoard((current) => ({
+      ...current,
+      // A chave precisa sumir do objeto: o Firestore recusa valores undefined explícitos.
+      cards: current.cards.map((card) => {
+        if (card.id !== cardId) return card;
+        const restored = { ...card };
+        delete restored.archivedAt;
+        return restored;
+      }),
+      columns: current.columns.map((column, index) =>
+        index === 0 && !column.cardIds.includes(cardId) ? { ...column, cardIds: [...column.cardIds, cardId] } : column,
+      ),
+    }), boardId);
+  }
+
+  function deleteArchivedCard(boardId: string, cardId: string) {
+    setBoard((current) => ({
+      ...current,
+      cards: current.cards.filter((card) => card.id !== cardId),
+      columns: current.columns.map((column) => ({ ...column, cardIds: column.cardIds.filter((id) => id !== cardId) })),
+    }), boardId);
+  }
+
   function deleteCard(cardId: string) {
     if (!cardModal) return;
     if (!window.confirm("Excluir este cartão?")) return;
@@ -2840,7 +2973,7 @@ export default function Home() {
               {visibleBoards.map((project) => {
                 const visibleIds = visibleIdsByBoard.get(project.id) ?? new Set<string>();
                 return (
-                  <SortableDesktop key={project.id} project={project} onCustomize={() => { activateBoard(project.id); setShowCustomizer(true); }}>
+                  <SortableDesktop key={project.id} project={project} archivedCount={project.cards.filter((card) => card.archivedAt).length} onCustomize={() => { activateBoard(project.id); setShowCustomizer(true); }} onOpenArchive={() => { activateBoard(project.id); setArchiveBoardId(project.id); }}>
                 <DndContext id={`vinello-board-dnd-${project.id}`} sensors={sensors} collisionDetection={closestCorners} onDragStart={(event) => handleDragStart(project.id, event)} onDragEnd={(event) => handleDragEnd(project.id, event)} onDragCancel={() => setActiveDrag(null)}>
                   <div className="board-scroll desktop-board-scroll" aria-label={`Quadro Kanban ${project.title}`}>
                     <SortableContext items={project.columns.map((column) => `sortable-column-${column.id}`)} strategy={horizontalListSortingStrategy}>
@@ -2863,6 +2996,18 @@ export default function Home() {
         </>}
       </section>
 
+      {archiveBoardId && (() => {
+        const archiveBoard = workspaceState.boards.find((project) => project.id === archiveBoardId);
+        return archiveBoard ? (
+          <ArchivePanel
+            project={archiveBoard}
+            onClose={() => setArchiveBoardId(null)}
+            onRestore={(cardId) => restoreCard(archiveBoard.id, cardId)}
+            onDelete={(cardId) => deleteArchivedCard(archiveBoard.id, cardId)}
+          />
+        ) : null;
+      })()}
+
       {showProjectModal && (
         <ProjectModal onClose={() => setShowProjectModal(false)} onSave={createProject} />
       )}
@@ -2875,6 +3020,7 @@ export default function Home() {
           onClose={() => setCardModal(null)}
           onSave={saveCard}
           onDelete={modalCard ? () => deleteCard(modalCard.id) : undefined}
+          onArchive={modalCard ? () => archiveCard(modalCard.id) : undefined}
         />
       )}
 
