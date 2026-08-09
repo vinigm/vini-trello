@@ -712,16 +712,21 @@ function CardGhost({ card }: { card: CardItem }) {
 function BoardColumn({
   column,
   cards,
+  canDelete,
   onAdd,
   onOpenCard,
   onEditColumn,
+  onDeleteColumn,
 }: {
   column: ColumnItem;
   cards: CardItem[];
+  canDelete: boolean;
   onAdd: (columnId: string) => void;
   onOpenCard: (id: string) => void;
   onEditColumn: (columnId: string) => void;
+  onDeleteColumn: (columnId: string) => void;
 }) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const { setNodeRef: setCardDropRef, isOver } = useDroppable({
     id: `column-${column.id}`,
     data: { type: "card-column", columnId: column.id },
@@ -741,7 +746,34 @@ function BoardColumn({
       ref={setNodeRef}
       className={`board-column ${isOver ? "column-over" : ""} ${isDragging ? "column-dragging" : ""}`}
       style={style}
+      onContextMenu={(event) => {
+        // Sobre um cartão o menu não aparece: quem mira o cartão não pode apagar a coluna sem querer.
+        if (!canDelete || (event.target instanceof Element && event.target.closest(".task-card"))) return;
+        event.preventDefault();
+        setContextMenu({
+          x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+          y: Math.max(8, Math.min(event.clientY, window.innerHeight - 54)),
+        });
+      }}
     >
+      {contextMenu && (
+        <>
+          <button type="button" className="board-context-dismiss" aria-label="Fechar menu da coluna" onClick={() => setContextMenu(null)} />
+          <div className="board-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setContextMenu(null);
+                onDeleteColumn(column.id);
+              }}
+            >
+              <Trash2 size={14} />
+              Excluir coluna
+            </button>
+          </div>
+        </>
+      )}
       <div className="column-accent" />
       <header
         className="column-header column-drag-handle"
@@ -2953,14 +2985,34 @@ export default function Home() {
     setColumnModal(null);
   }
 
-  function deleteColumn(columnId: string) {
-    if (!columnModal || columnModalBoard.columns.length <= 1 || !window.confirm("Excluir esta coluna? Os cartões serão movidos para a primeira coluna.")) return;
+  function removeColumn(boardId: string, columnId: string) {
     setBoard((current) => {
+      if (current.columns.length <= 1) return current;
       const removed = current.columns.find((column) => column.id === columnId);
       const remaining = current.columns.filter((column) => column.id !== columnId);
       if (removed?.cardIds.length) remaining[0] = { ...remaining[0], cardIds: [...remaining[0].cardIds, ...removed.cardIds] };
       return { ...current, columns: remaining };
-    }, columnModal.boardId);
+    }, boardId);
+  }
+
+  // Só pede confirmação quando há cartões em jogo — coluna vazia sai sem cerimônia.
+  function confirmRemoveColumn(boardId: string, columnId: string) {
+    const board = workspaceState.boards.find((project) => project.id === boardId);
+    const column = board?.columns.find((candidate) => candidate.id === columnId);
+    if (!board || !column || board.columns.length <= 1) return;
+    const total = column.cardIds.length;
+    if (total > 0) {
+      const aviso = total === 1
+        ? `A coluna “${column.title}” tem 1 cartão. Excluir a coluna e mover o cartão para “${board.columns[0].title}”?`
+        : `A coluna “${column.title}” tem ${total} cartões. Excluir a coluna e mover os cartões para “${board.columns[0].title}”?`;
+      if (!window.confirm(aviso)) return;
+    }
+    removeColumn(boardId, columnId);
+  }
+
+  function deleteColumn(columnId: string) {
+    if (!columnModal) return;
+    confirmRemoveColumn(columnModal.boardId, columnId);
     setColumnModal(null);
   }
 
@@ -3065,7 +3117,7 @@ export default function Home() {
                     <SortableContext items={project.columns.map((column) => `sortable-column-${column.id}`)} strategy={horizontalListSortingStrategy}>
                       {project.columns.map((column) => {
                         const cards = column.cardIds.map((id) => project.cards.find((card) => card.id === id)).filter((card): card is CardItem => Boolean(card && visibleIds.has(card.id)));
-                        return <BoardColumn key={column.id} column={column} cards={cards} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
+                        return <BoardColumn key={column.id} column={column} cards={cards} canDelete={project.columns.length > 1} onDeleteColumn={(columnId) => { activateBoard(project.id); confirmRemoveColumn(project.id, columnId); }} onAdd={(columnId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "new", columnId }); }} onOpenCard={(cardId) => { activateBoard(project.id); setCardModal({ boardId: project.id, mode: "edit", columnId: column.id, cardId }); }} onEditColumn={(columnId) => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "edit", columnId }); }} />;
                       })}
                     </SortableContext>
                     <button type="button" className="add-column-button" aria-label={`Adicionar lista ao desktop ${project.title}`} title="Adicionar outra lista" onClick={() => { activateBoard(project.id); setColumnModal({ boardId: project.id, mode: "new" }); }}><Plus size={18} /></button>

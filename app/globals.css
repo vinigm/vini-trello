@@ -1790,7 +1790,8 @@ select:focus-visible {
 .week-card-color > span { width: 7px; height: 7px; border: 1px solid rgba(38, 42, 48, 0.26); border-radius: 50%; }
 .week-card-color input { width: 1px; height: 1px; position: absolute; opacity: 0; pointer-events: none; }
 
-.week-context-dismiss {
+.week-context-dismiss,
+.board-context-dismiss {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -1800,7 +1801,8 @@ select:focus-visible {
   cursor: default;
 }
 
-.week-context-menu {
+.week-context-menu,
+.board-context-menu {
   min-width: 164px;
   position: fixed;
   z-index: 41;
@@ -1811,7 +1813,8 @@ select:focus-visible {
   box-shadow: 0 10px 28px rgba(28, 32, 38, 0.2);
 }
 
-.week-context-menu button {
+.week-context-menu button,
+.board-context-menu button {
   width: 100%;
   min-height: 32px;
   padding: 0 9px;
@@ -1828,7 +1831,8 @@ select:focus-visible {
   text-align: left;
 }
 
-.week-context-menu button:hover { background: #fbe9e7; }
+.week-context-menu button:hover,
+.board-context-menu button:hover { background: #fbe9e7; }
 
 /* A barra vive no cabeçalho, ao lado de "Personalizado": entrar e sair da tela não
    pode mudar a altura do cronograma. O display: contents evita um nível de caixa. */
