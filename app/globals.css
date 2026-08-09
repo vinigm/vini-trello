@@ -1586,6 +1586,32 @@ select:focus-visible {
 .week-schedule-day span { color: #797b80; font-size: 8px; }
 .week-schedule-day.is-today { color: #2f5279; background: #e7eef5; }
 
+/* Cruzamento do cursor: o dia e o horário da célula em edição ficam destacados. */
+.week-schedule-day.is-focused-day { color: #22415f; background: #cfe0ef; box-shadow: inset 0 -2px 0 #4f7198; }
+.week-time-label.is-focused-time { color: #22415f; background: #cfe0ef; font-weight: 800; box-shadow: inset -2px 0 0 #4f7198; }
+
+/* Linha do horário atual, posicionada dentro da faixa de 30 minutos correspondente. */
+.week-now-line {
+  height: 2px;
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  margin-top: -1px;
+  background: rgba(226, 87, 76, 0.85);
+  pointer-events: none;
+}
+
+.week-now-line::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  border-radius: 50%;
+  background: #e2574c;
+}
+
 .week-time-label,
 .week-slot {
   min-height: 0;

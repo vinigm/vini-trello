@@ -1635,6 +1635,7 @@ function WeeklySlot({
   onChange,
   onChangeColor,
   onToggleSelection,
+  onFocusChange,
   onPaste,
   onCopy,
   onKeyDown,
@@ -1653,6 +1654,7 @@ function WeeklySlot({
   onChange: (value: string) => void;
   onChangeColor: (color: string) => void;
   onToggleSelection: (kind: SelectionKind, value: string) => void;
+  onFocusChange: (focused: boolean) => void;
   onPaste: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onCopy: (event: ReactClipboardEvent<HTMLInputElement>) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
@@ -1732,6 +1734,8 @@ function WeeklySlot({
             onPaste={onPaste}
             onCopy={onCopy}
             onKeyDown={onKeyDown}
+            onFocus={() => onFocusChange(true)}
+            onBlur={() => onFocusChange(false)}
             aria-label={ariaLabel}
           />
           {value && (
@@ -1829,7 +1833,44 @@ function WeeklyPlannerGrid({
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
   const [fillText, setFillText] = useState("");
+  const [focusedSlot, setFocusedSlot] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [gridMetrics, setGridMetrics] = useState({ headerHeight: 28, rowHeight: 20, labelWidth: 64 });
   const marqueeActive = marquee !== null;
+  const focused = focusedSlot ? parseWeekSlotKey(focusedSlot) : null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // A linha do agora é posicionada de forma absoluta para não ocupar células da grade
+  // (item de grid empurraria o posicionamento automático das outras). As alturas vêm
+  // medidas porque as faixas encolhem quando a janela é baixa.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const observer = new ResizeObserver(() => {
+      const styles = getComputedStyle(grid);
+      const rows = styles.gridTemplateRows.split(" ").map(Number.parseFloat);
+      const columns = styles.gridTemplateColumns.split(" ").map(Number.parseFloat);
+      if (!Number.isFinite(rows[0]) || !Number.isFinite(rows[1]) || !Number.isFinite(columns[0])) return;
+      setGridMetrics((current) =>
+        current.headerHeight === rows[0] && current.rowHeight === rows[1] && current.labelWidth === columns[0]
+          ? current
+          : { headerHeight: rows[0], rowHeight: rows[1], labelWidth: columns[0] },
+      );
+    });
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+
+  // A linha do agora só existe se a semana exibida contém hoje e o horário cabe na grade.
+  const nowKey = dateKey(now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowOffset = (nowMinutes - 6 * 60) / 30;
+  const nowRow = Math.floor(nowOffset);
+  const showNowLine = days.some((date) => dateKey(date) === nowKey) && nowRow >= 0 && nowRow < WEEK_TIME_SLOTS.length;
   const [contextMenu, setContextMenu] = useState<{ slotKey: string; kind: SelectionKind; activityId?: string; x: number; y: number } | null>(null);
   const workSlotSet = useMemo(() => new Set(workSlots), [workSlots]);
   const today = dateKey(new Date());
@@ -2136,10 +2177,18 @@ function WeeklyPlannerGrid({
       <DndContext sensors={scheduleSensors} collisionDetection={closestCorners} onDragEnd={handleScheduleDragEnd}>
         <div className={`week-schedule-scroll ${marqueeActive ? "is-marquee" : ""}`} onPointerDown={startMarquee}>
           <div ref={gridRef} className="week-schedule-grid" role="grid" aria-label="Agenda semanal em intervalos de 30 minutos">
+          {showNowLine && (
+            <div
+              className="week-now-line"
+              aria-hidden="true"
+              title={`Agora — ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`}
+              style={{ top: gridMetrics.headerHeight + gridMetrics.rowHeight * nowOffset, left: gridMetrics.labelWidth }}
+            />
+          )}
           {marquee && <div className="week-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} />}
           <div className="week-schedule-corner" role="columnheader">Horário</div>
           {days.map((date, index) => (
-            <header key={dateKey(date)} className={`week-schedule-day ${dateKey(date) === today ? "is-today" : ""}`} role="columnheader">
+            <header key={dateKey(date)} className={`week-schedule-day ${dateKey(date) === today ? "is-today" : ""} ${focused?.day === dateKey(date) ? "is-focused-day" : ""}`} role="columnheader">
               <strong>{WEEKDAYS[index]}</strong>
               <span>{String(date.getDate()).padStart(2, "0")}/{String(date.getMonth() + 1).padStart(2, "0")}</span>
             </header>
@@ -2149,7 +2198,7 @@ function WeeklyPlannerGrid({
             const isFullHour = time.endsWith(":00");
             return (
               <div key={time} className="week-schedule-row" role="row">
-                <div className={`week-time-label ${isFullHour ? "is-full-hour" : ""}`} role="rowheader">{time}</div>
+                <div className={`week-time-label ${isFullHour ? "is-full-hour" : ""} ${focused?.time === time ? "is-focused-time" : ""}`} role="rowheader">{time}</div>
                 {days.map((date, column) => {
                   const key = weekSlotKey(date, time);
                   const value = notes[key] ?? "";
@@ -2167,6 +2216,7 @@ function WeeklyPlannerGrid({
                       onChange={(nextValue) => onChangeNote(key, nextValue)}
                       onChangeColor={(nextColor) => onChangeColors(selection.has(selectionId("primary", key)) ? selectedPrimaryKeys : [key], nextColor)}
                       onToggleSelection={toggleSelection}
+                      onFocusChange={(focused) => setFocusedSlot((current) => focused ? key : (current === key ? null : current))}
                       onPaste={(event) => handlePaste(event, row, column)}
                       onCopy={(event) => handleCopy(event, value)}
                       onKeyDown={(event) => handleCellKeyDown(event, row, column)}
