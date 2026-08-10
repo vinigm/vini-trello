@@ -1972,6 +1972,14 @@ select:focus-visible {
   animation: slide-in 220ms ease;
 }
 
+/* Expandido o cartão ocupa a tela inteira; o conteúdo ganha uma largura de leitura
+   centralizada para as linhas não ficarem quilométricas num monitor largo. */
+.card-drawer.is-expanded { width: 100vw; }
+.card-drawer.is-expanded .card-drawer-heading,
+.card-drawer.is-expanded .card-drawer-content,
+.card-drawer.is-expanded .card-drawer-actions { padding-inline: max(20px, calc((100vw - 1080px) / 2)); }
+.card-drawer.is-expanded .rich-description-editor { min-height: 46vh; }
+
 .card-drawer-heading {
   min-height: 64px;
   padding: 14px 20px;

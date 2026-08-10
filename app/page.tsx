@@ -55,6 +55,8 @@ import {
   LayoutDashboard,
   LoaderCircle,
   LogIn,
+  Maximize2,
+  Minimize2,
   List,
   ListChecks,
   ListOrdered,
@@ -1343,6 +1345,7 @@ function CardModal({
   const [activityText, setActivityText] = useState("");
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const activityRef = useRef<HTMLTextAreaElement>(null);
+  const [expanded, setExpanded] = useState(false);
   const isNewCard = !card;
 
   useEffect(() => {
@@ -1391,7 +1394,7 @@ function CardModal({
     <div className="modal-backdrop card-drawer-backdrop">
       <button type="button" className="backdrop-dismiss" aria-label="Fechar editor do cartão" onClick={onClose} />
       <aside
-        className="card-drawer"
+        className={`card-drawer ${expanded ? "is-expanded" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="card-modal-title"
@@ -1399,6 +1402,16 @@ function CardModal({
         <div className="card-drawer-heading">
           <h2 id="card-modal-title">{card ? "Detalhes do cartão" : "Novo cartão"}</h2>
           <div className="card-drawer-heading-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={expanded ? "Reduzir o cartão" : "Expandir o cartão"}
+              aria-pressed={expanded}
+              title={expanded ? "Reduzir para a lateral" : "Expandir para a tela inteira"}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
             {card && onArchive && (
               <button type="button" className="archive-button" title="Arquivar cartão" onClick={onArchive}>
                 <Archive size={15} />
