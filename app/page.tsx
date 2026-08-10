@@ -1342,6 +1342,7 @@ function CardModal({
   });
   const [activityText, setActivityText] = useState("");
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const activityRef = useRef<HTMLTextAreaElement>(null);
   const isNewCard = !card;
 
   useEffect(() => {
@@ -1356,6 +1357,15 @@ function CardModal({
     // Cartão novo já abre com o cursor no título, pronto para digitar.
     if (isNewCard) titleRef.current?.focus();
   }, [isNewCard]);
+
+  useEffect(() => {
+    // O campo do diário acompanha o texto para nada ficar escondido — inclusive ao
+    // encolher de volta depois de publicar o registro.
+    const node = activityRef.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+  }, [activityText]);
 
   function submitDraft() {
     if (!draft.title.trim()) return;
@@ -1429,7 +1439,7 @@ function CardModal({
             <section className="activity-journal">
               <div className="drawer-section-heading"><span>Diário de atividades</span><small>{draft.activity?.length ?? 0} registros</small></div>
               <div className="activity-composer">
-                <textarea value={activityText} onChange={(event) => setActivityText(event.target.value)} placeholder="Atualização rápida…" rows={2} />
+                <textarea ref={activityRef} value={activityText} onChange={(event) => setActivityText(event.target.value)} placeholder="Atualização rápida…" rows={2} />
                 <button type="button" className="primary-button" disabled={!activityText.trim()} onClick={addActivity}>Adicionar registro</button>
               </div>
               <div className="activity-list">

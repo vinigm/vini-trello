@@ -2221,7 +2221,9 @@ select:focus-visible {
 
 .activity-journal { padding-top: 2px; }
 .activity-composer { padding: 7px 8px; border: 1px solid rgba(46, 43, 48, 0.13); border-radius: 9px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; background: #fff; }
-.activity-composer textarea { width: 100%; min-height: 38px; max-height: 72px; padding: 2px 0; border: 0; outline: 0; resize: none; color: #303238; background: transparent; font-size: 12px; line-height: 1.45; }
+/* A altura é ajustada por JS conforme o conteúdo; o teto alto evita que um registro
+   longo empurre os botões do cartão para fora da tela. */
+.activity-composer textarea { width: 100%; min-height: 38px; max-height: 45vh; padding: 2px 0; border: 0; outline: 0; resize: none; overflow-y: auto; color: #303238; background: transparent; font-size: 12px; line-height: 1.45; }
 .activity-composer .primary-button { min-height: 30px; margin: 0; display: flex; align-self: end; font-size: 10px; white-space: nowrap; }
 .activity-composer .primary-button:disabled { opacity: 0.42; cursor: not-allowed; }
 .activity-list { margin-top: 10px; display: grid; gap: 7px; }
