@@ -280,45 +280,6 @@ const STANDARD_COLUMNS = [
   { key: "december", title: "Dezembro", color: "#e8eaed" },
 ] as const;
 
-const TRELLO_TASKS: Record<string, { todo?: string[]; doing?: string[]; done?: string[] }> = {
-  italia: {
-    todo: ["Ver roteiros", "Definir datas", "Tirar as férias", "Passagens", "Hotel", "Passeios"],
-  },
-  casa: {
-    todo: [
-      "Botar prateleira no banheiro da Vivi",
-      "Ver se dá para abrir embaixo da churrasqueira na cozinha",
-      "Forma de gelo de silicone",
-      "Vender as cadeiras",
-      "Verificar as fitas VHS/DVDs",
-      "Projetar o escritório e ver como fica a mesa",
-      "Ver o sofá novo",
-    ],
-    done: ["Finalizar aluguel do Itajaí"],
-  },
-  pessoal: {
-    todo: ["Comprar papel bolha", "Comprar cera para o piso vinílico", "Responder e-mail com pesquisa", "Vender o celular da sogra"],
-  },
-  mestrado: {
-    todo: [
-      "Marcar apresentação de andamento para o dia 20",
-      "Confirmar se consegui a cadeira de algoritmos",
-      "Início das aulas dia 5",
-      "Mandar para o comitê de ética o pedido dos dados de caso de dengue",
-    ],
-  },
-  panvel: {
-    todo: [
-      "Melhorar regra de cobertura de estoque",
-      "Fallback de densidade — itens sem previsão estão zerados",
-      "Implementar bandas de incerteza",
-      "Mapear o resto das regras de negócios",
-      "Ver se o Nicholas já tem o arquivo pronto com as regras de negócio",
-      "Investigação sobre a previsão do erro do faturamento do segundo semestre de 2026 em relação ao primeiro",
-    ],
-    doing: ["Modelagem de itens por categoria e mandar planilha para o Nicholas"],
-  },
-};
 
 const DEMO_CARD_TITLES = new Set(DEFAULT_BOARD.cards.map((card) => card.title.toLocaleLowerCase("pt-BR")));
 
@@ -406,30 +367,6 @@ function migrateBoard(board: BoardState) {
   cards.forEach((card) => {
     if (!columns.some((column) => column.cardIds.includes(card.id))) columns[0].cardIds.push(card.id);
   });
-
-  const seed = TRELLO_TASKS[normalizeKey(board.title)];
-  if (seed) {
-    const knownTitles = new Set(cards.map((card) => normalizeKey(card.title)));
-    (["todo", "doing", "done"] as const).forEach((columnKey) => {
-      seed[columnKey]?.forEach((title, index) => {
-        if (knownTitles.has(normalizeKey(title))) return;
-        const id = `${board.id}-trello-${columnKey}-${index + 1}`;
-        cards.push({
-          id,
-          title,
-          description: "",
-          label: "",
-          labelColor: LABEL_COLORS[0],
-          dueDate: "",
-          priority: "medium",
-          checklistDone: 0,
-          checklistTotal: 0,
-        });
-        targetByKey.get(columnKey)?.cardIds.push(id);
-        knownTitles.add(normalizeKey(title));
-      });
-    });
-  }
 
   return { ...board, columns, cards };
 }
